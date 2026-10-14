@@ -395,6 +395,39 @@ The bundle install leaves no files behind (no bundled package edits, no config w
 | No TTS sound | "Line playback" needs `dsh-xiaomi-tts` installed in the host and the toggle switched on; the toggle is hidden otherwise |
 | Mixed both install methods | Fully uninstall/roll back one method first, then reinstall with the other |
 
+### When the plugin store / `dsh plugin add` cannot install it
+
+Short version: this is a **pure front-end plugin bundle** — no `prepare` script, zero `dependencies`, and the build output is committed to the repo, so **installing needs no build step at all**. Failures therefore come from the two external conditions of the git install path: **can you reach GitHub**, and **can your profile's registry resolve the market package**. Neither is a defect in this plugin. Also note the plugin is **not published to npm**, so the store will always fail to find it and fall back to a git install — that is expected behaviour, not a fault.
+
+| Key line in the log | What it means | What to do |
+|---|---|---|
+| `git ls-remote ... failed` / `failedAt: 'spec-host'` | your machine cannot reach GitHub | pre-check below |
+| `ERR_PNPM_NO_MATCHING_VERSION` / `404 ... not found` | registry mirror has not synced that version yet | switch to the official registry and retry; mirrors usually catch up within hours |
+| `Ignored build scripts: <pkg>` | pnpm blocked a build script (never happens for this plugin) | only then touch `allowBuilds` |
+| `[exit 1]` with no key line | truncated log | attach `<DSH Home>\profiles\<profile>\hub.log` and `.plugin-manager\logs\operation-*\pnpm.log` to an issue |
+
+```powershell
+# no output within 10s = GitHub is unreachable or too slow from this machine
+git -c credential.helper= ls-remote -- https://github.com/Sutera-Diffusus/dsh-whale-musume.git HEAD
+
+# behind a proxy (use your own port)
+git config --global http.https://github.com.proxy http://127.0.0.1:7890
+```
+
+DSH runs that `git ls-remote` as a connectivity pre-check with a **5-second default timeout** (`githubConnectionTimeoutMs`), so a slow link fails the whole install before pnpm even starts. The `allowBuilds` hint DSH appends on git-form failures only checks whether the install argument looks like a git URL — **it does not check whether the package needs building**, so for this plugin it is a false positive: never edit `pnpm-workspace.yaml` unless pnpm itself printed `Ignored build scripts: <pkg>`.
+
+**Most reliable route — bypass git and the registry:** download `dsh-whale-musume-plugin-v<version>.zip` plus `SHA256SUMS-v<version>.txt` from [Releases](https://github.com/Sutera-Diffusus/dsh-whale-musume/releases), unpack it, and install by local path (`$Desktop` / `$Cli` as defined in the [desktop deploy doc](docs/desktop-0.2.0-rc.2-deploy.md)):
+
+```powershell
+$env:ELECTRON_RUN_AS_NODE = "1"
+& "$Desktop\DeepSeek Harness.exe" --expose-internals $Cli plugin --profile desktop add "<unpacked path>\dsh-whale-musume"
+
+# legacy web
+dsh plugin --profile web add "<unpacked path>\dsh-whale-musume"
+```
+
+Then **restart the desktop app** (a page refresh is not enough). Sanity checks: `window.__dshWhaleMusumeBooted === true` and `document.querySelectorAll('[data-dsh-whale-root]').length === 1`. `add` does not overwrite an installed version, so `remove` + `add` is the reliable way to move to a newer build; your growth data (`whale-moe:*`) lives in the host origin's `localStorage` and survives reinstalls.
+
 ---
 
 ## Roadmap

@@ -395,6 +395,61 @@ node scripts/apply-theme.mjs --rollback "<backup dir>"
 | 播报没声音 | 「台词播报」需要宿主装了 `dsh-xiaomi-tts` 且你已打开该开关；未安装时该开关不显示 |
 | 两种安装方式混用了 | 先用对应方式完整卸载/回滚，再任选一种重装 |
 
+### 安装失败排查（从插件市场 / `dsh plugin add` 装不上）
+
+先说结论：鲸鱼娘是**纯前端插件包**——`package.json` 没有 `prepare`、没有任何 `dependencies`、产物随仓库提交，**安装过程不需要任何构建**。所以安装失败几乎总是卡在 git 安装这条路径的两个外部条件上（**GitHub 连不连得上**、**profile 的 registry 解不解析得出**），与插件代码无关。另外，本插件**没有发布到 npm**，插件市场搜包一定搜不到、每次都会回落 git 安装，这是预期行为而不是故障。
+
+| 日志里的关键行 | 属于 | 处理 |
+|---|---|---|
+| `git ls-remote ... failed` / `failedAt: 'spec-host'` | 本机到 GitHub 的链路 | 见「网络自查」 |
+| `ERR_PNPM_NO_MATCHING_VERSION` / `404 ... not found` | registry 镜像还没同步到这个版本 | 见「registry 与镜像」 |
+| `Ignored build scripts: <包名>` | pnpm 拦下了构建脚本（本插件不会出现） | 见「`allowBuilds` 是误报」 |
+| 只有 `[exit 1]`、没有关键行 | 日志被截断 | 贴 `<DSH Home>\profiles\<profile>\hub.log` 与 `.plugin-manager\logs\operation-*\pnpm.log` 到 issue |
+
+**registry 与镜像**：报 `ERR_PNPM_NO_MATCHING_VERSION` 时，先确认镜像有没有滞后——换官方源重试（GUI：添加插件对话框的 Registry 选择器选「npm 官方源」）。镜像滞后通常几小时内自愈，多数情况**直接重试**即可，不需要改任何配置文件。
+
+**网络自查**：
+
+```powershell
+# 超过 10 秒没输出 = 本机到 GitHub 不通或过慢
+git -c credential.helper= ls-remote -- https://github.com/Sutera-Diffusus/dsh-whale-musume.git HEAD
+
+# 需要代理时（端口换成你自己的）
+git config --global http.https://github.com.proxy http://127.0.0.1:7890
+```
+
+DSH 在 git 安装前会用 `git ls-remote` 做一次**默认 5 秒超时**的连通性预检（`githubConnectionTimeoutMs`）；预检超时就直接判失败（`failedAt: 'spec-host'`）。上面这条命令能在 5 秒内返回，安装才有机会走完。
+
+**`allowBuilds` 提示对鲸鱼娘是误报**：git 形式安装失败时，DSH 常会追加一句「add the exact key pnpm printed above under `allowBuilds` in `<DSH Home>/profiles/<profile>/pnpm-workspace.yaml`」。这句话只看安装参数是不是 git 形式，**不看插件要不要构建**。判据很简单：**pnpm 必须先打印一行 `Ignored build scripts: <包名>`，才轮到 `allowBuilds`**；没有那一行就不要改这个文件（本包无依赖、无 `prepare`，不存在需要放行的构建脚本）。
+
+**绕开 git 与 registry（最稳）**：用 Release 资产，zip **不做 git 预检、不碰 registry、没有 prepare 步骤**。
+
+1. 从 [Releases](https://github.com/Sutera-Diffusus/dsh-whale-musume/releases) 下载 `dsh-whale-musume-plugin-v<版本>.zip` 与 `SHA256SUMS-v<版本>.txt`，解压得到 `dsh-whale-musume/`；
+2. 在解压目录的上一级，按本地路径安装（`$Desktop` / `$Cli` 的取值见[桌面端部署文档](docs/desktop-0.2.0-rc.2-deploy.md)）：
+
+```powershell
+$env:ELECTRON_RUN_AS_NODE = "1"
+& "$Desktop\DeepSeek Harness.exe" --expose-internals $Cli plugin --profile desktop add "<解压路径>\dsh-whale-musume"
+
+# 旧版 Web
+dsh plugin --profile web add "<解压路径>\dsh-whale-musume"
+```
+
+3. 校验 zip：`Get-FileHash .\dsh-whale-musume-plugin-v<版本>.zip -Algorithm SHA256` 与 `SHA256SUMS` 里的值对比。
+
+**怎么确认装上了**：
+
+```powershell
+# 清单里有她：dependencies 与 dsh.profile.bundles 各出现一次
+Get-Content "$DshHome\profiles\desktop\package.json"
+Test-Path "$DshHome\profiles\desktop\node_modules\dsh-whale-musume\lib\client.js"
+(Get-ChildItem "$DshHome\profiles\desktop\node_modules\dsh-whale-musume\assets\generated" -File).Count   # 92
+```
+
+**桌面端装完要重启应用**（不是刷新页面）。页面侧可以看 `window.__dshWhaleMusumeBooted === true`、`document.querySelectorAll('[data-dsh-whale-root]').length === 1`。
+
+**版本没更新时先卸载再装**：`add` 对已安装实例不覆盖版本，`remove` + `add` 是拿到新版最稳的方式。养成数据（`whale-moe:*`）存在宿主 origin 的 `localStorage` 里，重装后还在。
+
 ---
 
 ## 路线图
