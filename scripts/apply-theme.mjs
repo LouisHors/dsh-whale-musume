@@ -392,6 +392,30 @@ function mascotBlock(marker) {
 				(0, react_jsx_runtime.jsx)(MascotTitleRow, { compact: true })
 			] });
 		}
+		function MascotWorkSpeechRow() {
+			const [mode, setMode] = mascotReact.useState(() => (MascotValue("workSpeech", "chatty") === "quiet" ? "quiet" : "chatty"));
+			const pick = (next) => {
+				try { window.localStorage.setItem("whale-moe:workSpeech", next); } catch (e) {}
+				window.dispatchEvent(new CustomEvent("whale-moe-prefs-change", { detail: { key: "workSpeech", value: next } }));
+				setMode(next);
+			};
+			const options = [{ id: "chatty", label: "话痨", hint: "15–40 秒" }, { id: "quiet", label: "安静", hint: "90–240 秒" }];
+			return (0, react_jsx_runtime.jsxs)("div", { style: { ...MASCOT_ROW_STYLE, borderBottom: "none", flexWrap: "wrap", paddingBottom: 0 }, children: [
+				(0, react_jsx_runtime.jsxs)("span", { style: { display: "flex", flexDirection: "column", gap: "2px", minWidth: 0 }, children: [
+					(0, react_jsx_runtime.jsx)("span", { children: "工作中台词" }),
+					(0, react_jsx_runtime.jsx)("span", { style: { color: "var(--dsw-alias-label-secondary)", fontSize: "11px", lineHeight: "15px" }, children: "按当前任务话题取词；待机问候与天气不受影响" })
+				] }),
+				(0, react_jsx_runtime.jsx)("div", { style: { background: "var(--dsw-alias-interactive-bg-hover, transparent)", borderRadius: "10px", display: "flex", gap: "4px", padding: "3px" }, children: options.map((o) => (0, react_jsx_runtime.jsx)("button", {
+					key: o.id,
+					type: "button",
+					"aria-pressed": mode === o.id,
+					title: "工作中 " + o.hint + "最多说一句",
+					onClick: (event) => { event.stopPropagation(); event.preventDefault(); pick(o.id); },
+					style: { background: mode === o.id ? "var(--dsw-static-accent, #4da3ff)" : "transparent", border: "none", borderRadius: "8px", color: mode === o.id ? "#fff" : "inherit", cursor: "pointer", fontSize: "12px", padding: "5px 12px" },
+					children: o.label
+				})) })
+			] });
+		}
 		function MascotSwitchGrid() {
 			const rows = [
 				{ label: "鲸鱼娘", prefKey: "pet" },
@@ -403,7 +427,10 @@ function mascotBlock(marker) {
 				{ label: "深夜模式", prefKey: "night" },
 				{ label: "天气特效", prefKey: "weatherFx" }
 			];
-			return (0, react_jsx_runtime.jsx)("div", { style: { display: "grid", gap: "2px 14px", gridTemplateColumns: "1fr 1fr", padding: "2px 0 8px", width: "100%" }, children: rows.map((r) => (0, react_jsx_runtime.jsx)(MascotPrefRow, { key: r.prefKey, label: r.label, prefKey: r.prefKey, compact: true })) });
+			return (0, react_jsx_runtime.jsxs)("div", { style: { display: "flex", flexDirection: "column", width: "100%" }, children: [
+				(0, react_jsx_runtime.jsx)("div", { style: { display: "grid", gap: "2px 14px", gridTemplateColumns: "1fr 1fr", padding: "2px 0 8px", width: "100%" }, children: rows.map((r) => (0, react_jsx_runtime.jsx)(MascotPrefRow, { key: r.prefKey, label: r.label, prefKey: r.prefKey, compact: true })) }),
+				(0, react_jsx_runtime.jsx)(MascotWorkSpeechRow, {})
+			] });
 		}
 		function MascotDailyQuests() {
 			const [tick, setTick] = mascotReact.useState(0);

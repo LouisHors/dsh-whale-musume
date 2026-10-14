@@ -160,6 +160,7 @@ More: [interaction board](docs/images/actions-board.png) · [new artwork board](
 - **Mood tiers**: gentle lines when mood is low, energetic ones when it is high; bond levels unlock their own lines
 - **Weather companion**: leave the city empty for zero networking; otherwise uses Open-Meteo (free, no key) plus full-screen ambience (rain / snow / lightning / wind / fog / heat haze / frost), automatically toned down while working
 - **Proactive care**: sitting reminder (25 min busily working) / late-night rest nudge / stuck-companion check (same state for 8 min) / welcome-back greeting (away over 3 min); at least 15 minutes between prompts
+- **Two work-speech modes** (issue #24): thinking / tool / success / failure lines share one random cooldown window — **Chatty** 15–40 s, **Quiet** 90–240 s — so at most one line per window; thinking and tool lines are picked from the current task topic (same local classifier as idle chatter), while success / failure keep their own lines. Idle greetings and weather are unaffected; Chatty is the default
 - **Optional TTS playback**: the "line playback" toggle only appears when the host provides a `dsh-xiaomi-tts` service; **off by default**, and a missing service, missing configuration or failed playback never affects normal interaction
 
 ### 🎀 Interactions & visuals
@@ -176,7 +177,7 @@ More: [interaction board](docs/images/actions-board.png) · [new artwork board](
 - **Artwork preloading**: the first screen loads only 5 common poses, the remaining 90+ are fetched one at a time every 120 ms while idle, so cold pose switches never stall; failures are silent
 - **Accessibility mode** (off by default): Tab focus, Enter/Space to pat, arrow keys to nudge position (Shift to speed up), state changes announced through `aria-live`
 - **Theme following**: follows the host's light/dark theme for bubbles and menus only — **artwork is never filtered**, so the art style is preserved
-- **Testable**: the state machine and the presentation layer are separate; 142 unit tests run with plain `node --test`
+- **Testable**: the state machine and the presentation layer are separate; 158 unit tests run with plain `node --test`
 
 ---
 
@@ -228,7 +229,7 @@ Six things worth trying in the first minute:
 3. **Drag her around** — "picked up" artwork, swaying with the cursor, then a short slide and a saved position;
 4. **Right-click her** — feed / poke / praise / bubble minigame / back to home / open settings;
 5. **Run a tool call** — she picks up the laptop with a soft blue glow;
-6. **Open Settings → Mascot** — 15 toggles, growth stats, achievement wall and growth journal live there.
+6. **Open Settings → Mascot** — 15 toggles plus the work-speech two-mode switch, growth stats, achievement wall and growth journal live there.
 
 ---
 
@@ -254,11 +255,11 @@ Six things worth trying in the first minute:
 
 ## Settings panel
 
-Path: **DSH Settings → Mascot** — 15 pill toggles across six collapsible groups.
+Path: **DSH Settings → Mascot** — 15 pill toggles, a Chatty / Quiet work-speech switch, and six collapsible groups.
 
 | Group | Contents |
 |---|---|
-| Companion behaviour | What to call you, **her self-name** (empty falls back to the default), mascot on/off, speech bubbles, TTS playback (optional), particles, keyword reactions, slacking reminders, night mode, per-tool poses, drag inertia, proactive care, accessibility |
+| Companion behaviour | What to call you, **her self-name** (empty falls back to the default), mascot on/off, speech bubbles, work speech (Chatty / Quiet), TTS playback (optional), particles, keyword reactions, slacking reminders, night mode, per-tool poses, drag inertia, proactive care, accessibility |
 | Weather | City, optional API key, weather effects toggle |
 | Balance | Balance care toggle, show-number toggle, current balance and tier |
 | Daily & growth | Today's quests / weekly sign-in / titles (tabbed) |
@@ -433,7 +434,7 @@ dsh-whale-musume/
 │  ├─ build-review.py               # artwork review page
 │  └─ slice-batch.py                # poster slicing
 ├─ test/
-│  ├─ *.test.mjs                    # unit and contract tests (142)
+│  ├─ *.test.mjs                    # unit and contract tests (158)
 │  ├─ desktop-client.test.mjs       # desktop (0.2.0-rc.2) contract and regression assertions
 │  ├─ cdp-whale-moe.mjs             # full CDP acceptance for the legacy web host
 │  ├─ motion-qa.mjs / soak-work.mjs # motion quality and 60s soak
@@ -462,7 +463,7 @@ dsh-whale-musume/
 ## Development & Testing
 
 ```powershell
-# unit and contract tests (142, no browser or server needed)
+# unit and contract tests (158, no browser or server needed)
 npm test
 
 # equivalent explicit form

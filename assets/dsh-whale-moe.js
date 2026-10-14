@@ -61,6 +61,13 @@
   function writePref(key, value) {
     try { root.localStorage.setItem("whale-moe:" + key, value ? "1" : "0"); } catch (e) { /* storage unavailable */ }
   }
+  /* 字符串型偏好（例如「工作中台词」的 chatty / quiet 两档）：缺省或读取失败时回落到 fallback。 */
+  function readPrefText(key, fallback) {
+    try {
+      var value = root.localStorage.getItem("whale-moe:" + key);
+      return value === null || value === "" ? fallback : String(value);
+    } catch (e) { return fallback; }
+  }
 
   var MODES = Object.freeze({ auto: 1, bar: 1, side: 1, float: 1, mini: 1 });
   function readMode() {
@@ -583,6 +590,29 @@
     if (menu) menu.hidden = !menu.hidden;
   }
 
+  /* 右键菜单定位（issue #23）：菜单项数量随开关变化（关小游戏 6 项 / 开小游戏 8 项），
+     高度不能再写死常量——原来的 `innerHeight - 160` 比真实高度小 108px，贴底右键必被裁。
+     做法：挂载后量真实尺寸，先按光标摆放；下方放不下就翻到光标上方；最后统一钳进视口。
+     只要桌宠本身在视口内，菜单就完整可见。 */
+  var MENU_MARGIN = 8;
+  var MENU_FALLBACK_W = 180;
+  var MENU_FALLBACK_H = 268;
+  function placeMenu(anchorX, anchorY, menuW, menuH, viewW, viewH, margin) {
+    var gap = margin === undefined ? MENU_MARGIN : margin;
+    var width = menuW > 1 ? menuW : MENU_FALLBACK_W;
+    var height = menuH > 1 ? menuH : MENU_FALLBACK_H;
+    var left = anchorX;
+    var top = anchorY;
+    if (top + height + gap > viewH) {
+      var above = anchorY - height - gap;
+      top = above >= gap ? above : viewH - height - gap;
+    }
+    if (left + width + gap > viewW) left = viewW - width - gap;
+    if (left < gap) left = gap;
+    if (top < gap) top = gap;
+    return { left: Math.round(left), top: Math.round(top) };
+  }
+
   function showContextMenu(x, y) {
     var old = doc.querySelector("[data-dsh-whale-context]");
     if (old) old.remove();
@@ -622,8 +652,11 @@
       })(items[i]);
     }
     doc.body.appendChild(menu);
-    menu.style.left = Math.min(x, root.innerWidth - 180) + "px";
-    menu.style.top = Math.min(y, root.innerHeight - 160) + "px";
+    /* 先挂载量尺寸再定位：CSS 里宽度固定、高度由菜单项决定，量一次即可（同步 reflow）。 */
+    var menuRect = typeof menu.getBoundingClientRect === "function" ? menu.getBoundingClientRect() : null;
+    var place = placeMenu(x, y, menuRect ? menuRect.width : 0, menuRect ? menuRect.height : 0, root.innerWidth, root.innerHeight, MENU_MARGIN);
+    menu.style.left = place.left + "px";
+    menu.style.top = place.top + "px";
     doc.addEventListener("pointerdown", function closer(event) {
       if (!menu.contains(event.target)) { menu.remove(); doc.removeEventListener("pointerdown", closer, true); }
     }, true);
@@ -1899,9 +1932,9 @@
         applyQuestSignal("failure", 1);
         applyGrowth({ type: "failure" }, Date.now(), 0);
         burst("！");
-        if (view === "workbench") {
-          var fLine = say("work", memory.failureStreak >= 3 ? "gentle" : "failure");
-          if (fLine) showLine(fLine);
+        if (view === "workbench" && workSpeechAllowed(Date.now(), workSpeechMode())) {
+          var fLine = pickWorkSpeechLine("failure");
+          if (fLine) showChatLine(fLine);
         }
         if (!motionReduced()) {
           rootNode.classList.remove("dsh-whale-shake");
@@ -1917,9 +1950,9 @@
         applyGrowth({ type: "success" }, Date.now(), 0);
         burst("★");
         spawnParticles(12, Date.now());
-        if (view === "workbench") {
-          var sLine = say("work", "success");
-          if (sLine) showLine(sLine);
+        if (view === "workbench" && workSpeechAllowed(Date.now(), workSpeechMode())) {
+          var sLine = pickWorkSpeechLine("success");
+          if (sLine) showChatLine(sLine);
         }
       }
       if (computed.state === "tool" || computed.state === "thinking") {
@@ -1931,16 +1964,16 @@
           announceUnlocks(["night-work"]);
         }
         burst("…");
-        if (view === "workbench") {
-          var tLine = say("work", computed.state === "tool" ? "tool" : "thinking");
-          if (tLine) showLine(tLine);
+        if (view === "workbench" && workSpeechAllowed(Date.now(), workSpeechMode())) {
+          var tLine = pickWorkSpeechLine(computed.state === "tool" ? "tool" : "thinking");
+          if (tLine) showChatLine(tLine);
         }
       }
     }
 
     memory.state = computed;
     memory.lastLine = computed.line;
-    root.__dshWhaleMoeDebug = { state: computed.state, pose: computed.pose, line: computed.line, view: view, mode: readMode(), layout: layout.kind, failed: memory.failed, errorMatches: memory.lastErrorMatches, errorActive: memory.lastErrorActive, lastEventState: memory.lastEventState, stateHoldUntil: memory.stateHoldUntil, holdLeft: Math.max(0, memory.stateHoldUntil - Date.now()), moodPose: memory.moodPose, moodUntil: memory.moodUntil, moodAnimate: memory.moodAnimate, layers: { active: layerState.active, loaded: layerState.loaded, gen: layerState.gen, pendingSwap: layerState.pendingSwap, pendingSince: layerState.pendingSince }, toolWasActive: memory.toolWasActive, lastSuccessAt: memory.lastSuccessAt, toolGoneAt: memory.toolGoneAt, toolSeenAt: memory.toolSeenAt, at: Date.now(), idleChat: { nextAt: idleChat.nextAt, lastGreetAt: idleChat.lastGreetAt, lastGreetBucket: idleChat.lastGreetBucket }, weather: weatherSummary() };
+    root.__dshWhaleMoeDebug = { state: computed.state, pose: computed.pose, line: computed.line, view: view, mode: readMode(), layout: layout.kind, failed: memory.failed, errorMatches: memory.lastErrorMatches, errorActive: memory.lastErrorActive, lastEventState: memory.lastEventState, stateHoldUntil: memory.stateHoldUntil, holdLeft: Math.max(0, memory.stateHoldUntil - Date.now()), moodPose: memory.moodPose, moodUntil: memory.moodUntil, moodAnimate: memory.moodAnimate, layers: { active: layerState.active, loaded: layerState.loaded, gen: layerState.gen, pendingSwap: layerState.pendingSwap, pendingSince: layerState.pendingSince }, toolWasActive: memory.toolWasActive, lastSuccessAt: memory.lastSuccessAt, toolGoneAt: memory.toolGoneAt, toolSeenAt: memory.toolSeenAt, at: Date.now(), idleChat: { nextAt: idleChat.nextAt, lastGreetAt: idleChat.lastGreetAt, lastGreetBucket: idleChat.lastGreetBucket }, workSpeech: { mode: workSpeech.mode || workSpeechMode(), nextAt: workSpeech.nextAt, lastAt: workSpeech.lastAt, left: Math.max(0, workSpeech.nextAt - Date.now()) }, weather: weatherSummary() };
   }
 
   /* 待机 base 稳定为 idle-cute；情绪动作只由随机低频的 showMood 覆盖。
@@ -2641,6 +2674,57 @@
     get busy() { return weatherFxState.busy; },
     get particles() { return weatherFxState.particles.length; }
   };
+
+  /* ---------- work speech scheduler（工作态台词两档，issue #24） ----------
+
+     工作态（thinking / tool / success / failure）原来每跳一次状态就弹一句：一个十几分钟的
+     长任务能刷几十条，而且内容全部来自固定语料，与正在做的事无关。现在改成两档 + 一个随机
+     冷却窗口，窗口之内只允许说一句：
+
+       · 话痨 chatty（默认）：15–40 秒
+       · 安静 quiet：90–240 秒
+
+     空闲时的问候 / 天气 / 话题闲聊（idleChatTick）完全不受影响；总开关「台词气泡」优先级
+     最高，关掉就一句都不说。窗口内先通过的那条会把 nextAt 推后，因此同一次状态跳变里的
+     第二条会被自然挡住，不需要额外去重逻辑。 */
+  var WORK_SPEECH_MODE_CHATTY = "chatty";
+  var WORK_SPEECH_MODE_QUIET = "quiet";
+  var WORK_SPEECH_WINDOWS = { chatty: [15000, 40000], quiet: [90000, 240000] };
+  var workSpeech = { mode: "", nextAt: 0, lastAt: 0 };
+
+  function workSpeechMode() {
+    return readPrefText("workSpeech", WORK_SPEECH_MODE_CHATTY) === WORK_SPEECH_MODE_QUIET ? WORK_SPEECH_MODE_QUIET : WORK_SPEECH_MODE_CHATTY;
+  }
+  function workSpeechWindow(mode) {
+    return WORK_SPEECH_WINDOWS[mode] || WORK_SPEECH_WINDOWS[WORK_SPEECH_MODE_CHATTY];
+  }
+  function workSpeechAllowed(now, mode, rand) {
+    var chosen = mode === WORK_SPEECH_MODE_QUIET ? WORK_SPEECH_MODE_QUIET : WORK_SPEECH_MODE_CHATTY;
+    /* 切档立即生效：清掉上一档遗留的等待窗口，否则从「安静」切回「话痨」要干等几分钟。 */
+    if (workSpeech.mode !== chosen) { workSpeech.mode = chosen; workSpeech.nextAt = 0; }
+    if (now < workSpeech.nextAt) return false;
+    var span = workSpeechWindow(chosen);
+    var roll = typeof rand === "function" ? rand() : Math.random();
+    workSpeech.nextAt = now + span[0] + Math.floor(roll * (span[1] - span[0]));
+    workSpeech.lastAt = now;
+    return true;
+  }
+  /* 工作态取词：thinking / tool 优先按当前任务话题取（与 idleChatTick 同一套组合），
+     成功 / 出错仍用各自语料——那两句带信息量，不该被话题化掉。 */
+  function pickWorkSpeechLine(state) {
+    if (!readPref("chat")) return "";
+    if (state === "thinking" || state === "tool") {
+      var topic = latestTaskTopic();
+      if (topic && topic !== "general") {
+        var topicLine = core.pickDialogueAvoidRecent("context", topic, 0, Math.random, recentLines);
+        if (topicLine) return topicLine;
+      }
+      return say("work", state === "tool" ? "tool" : "thinking");
+    }
+    if (state === "failure") return say("work", memory.failureStreak >= 3 ? "gentle" : "failure");
+    if (state === "success") return say("work", "success");
+    return "";
+  }
 
   /* ---------- idle chat scheduler (5-8 min, context-aware) ---------- */
   var IDLE_CHAT_MIN = 5 * 60000;
