@@ -751,7 +751,8 @@
       showMood(busyNow ? (Math.random() < 0.5 ? "work-pat" : "work-ram") : (zone === "head" ? "react-head" : "blush"), busyNow ? 2400 : 2600, true);
       emojiBurst(busyNow ? ["💻", "💦", "✨"] : ["💖", "✨", "⭐"]);
       if (rapid) { reconcile(); return; }
-      var pat = applyGrowth({ type: "pat" }, now, patHistory.length);
+      addUsageStat("pat", 1);
+      var pat = applyGrowth({ type: "pat" }, now, usageStats.pat);
       applyQuestSignal("pat", 1);
       if (now - lastPatSpeechAt >= 2500) {
         lastPatSpeechAt = now;
@@ -2952,7 +2953,9 @@
     var key = event.key;
     if (key === "Enter" || key === " " || key === "Spacebar") {
       event.preventDefault();
-      applyGrowth({ type: "pat" }, Date.now(), 0);
+      addUsageStat("pat", 1);
+      applyGrowth({ type: "pat" }, Date.now(), usageStats.pat);
+      applyQuestSignal("pat", 1);
       burst("💗");
       showMood("blush", 2600, true);
       var line = say("interact", "pat");
