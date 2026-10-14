@@ -26,3 +26,15 @@ Thumbs.db
 _reference/
 
 dist/
+
+# ---- 本地工作区物料：不属于插件本体，也不随 Release 分发 ----
+# 历史动画素材（.webm）：presenter 从未引用，tools/build-release-zip.mjs 已明确不打包
+/assets/anim/
+# 关联工程：各自独立维护，不并入插件仓库
+/dsh-whale-guild-extension/
+/dsh-whale-moe-theme-extension/
+# 姿势图预览包 / 宣传物料：走各自的 Release 与设计稿
+/poses/
+/promo/
+# 本机项目汇总迁移简报（项目目录管理文档，非插件产物）
+/MIGRATION_BRIEF.md
