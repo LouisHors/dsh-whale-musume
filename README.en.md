@@ -78,6 +78,8 @@ dsh plugin --profile web add github:Sutera-Diffusus/dsh-whale-musume
 
 Then **restart the host** (restart the desktop app, or restart `dsh web` and hit `Ctrl+F5`). She shows up in the bottom-right corner.
 
+> If the plugin store or `dsh plugin add` fails to install it, see [When the plugin store cannot install it](#when-the-plugin-store--dsh-plugin-add-cannot-install-it). A log that only shows `[exit 1]`, the expected miss on npm and fallback to git, and the `allowBuilds` note are all covered there.
+
 <details>
 <summary>How do I verify the install actually worked?</summary>
 
@@ -531,6 +533,7 @@ Conventions live in [CONTRIBUTING.md](CONTRIBUTING.md): after touching the prese
 - **[@ppy-web](https://github.com/ppy-web)** — MiMo TTS line playback integration (v2.1.0)
 - **[@icemaple77](https://github.com/icemaple77)** — fix for the mascot vanishing behind dialogs, and CNY-preferred balance accounts (v2.1.0)
 - **[@Lurantis](https://github.com/Lurantis)** — early contributions
+- **[@ClutchBear](https://github.com/ClutchBear)** — unofficial native Windows port, [workbuddy-whale-musume](https://github.com/ClutchBear/workbuddy-whale-musume) (Rust; no affiliation with this project, and not an official Windows build). MIT attribution was confirmed in [#17](https://github.com/Sutera-Diffusus/dsh-whale-musume/issues/17)
 - Thanks also to [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) for the plugin system, and to the directories that list and test community plugins: [awesome-deepseek-harness](https://github.com/0xsline/awesome-deepseek-harness), [awesome-dsh-plugins](https://github.com/kejixiaoliang/awesome-dsh-plugins), [WhaleHub](https://github.com/vvlife/whalehub-dsh), [dshbase](https://dshbase.com/zh/plugins/dsh-whale-musume/), [dsh-meme-hub](https://github.com/the-beating-light-of-the-nail/dsh-meme-hub)
 
 ## License

@@ -78,6 +78,8 @@ dsh plugin --profile web add github:Sutera-Diffusus/dsh-whale-musume
 
 装完**重启宿主**（桌面端重启应用；旧版 Web 重启 `dsh web` 后 `Ctrl+F5`），她就出现在右下角了。
 
+> 从插件市场或 `dsh plugin add` 装不上时，见[安装失败排查](#安装失败排查从插件市场--dsh-plugin-add-装不上)。日志被截成只剩 `[exit 1]`、没发到 npm 所以回落 git、还有 `allowBuilds` 提示，那一节都写了。
+
 <details>
 <summary>装完怎么确认她真的进来了？</summary>
 
@@ -553,6 +555,7 @@ node test/cdp-whale-moe.mjs
 - **[@ppy-web](https://github.com/ppy-web)** —— MiMo TTS 台词播报联动（v2.1.0）
 - **[@icemaple77](https://github.com/icemaple77)** —— 修复弹窗导致桌宠永久消失、余额优先 CNY 账户（v2.1.0）
 - **[@Lurantis](https://github.com/Lurantis)** —— 早期贡献
+- **[@ClutchBear](https://github.com/ClutchBear)** —— 非官方 Windows 原生移植 [workbuddy-whale-musume](https://github.com/ClutchBear/workbuddy-whale-musume)（Rust，与本仓库无隶属关系，不是官方 Windows 版）。MIT 归属已在 [#17](https://github.com/Sutera-Diffusus/dsh-whale-musume/issues/17) 确认
 - 也感谢 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 提供的插件体系，以及各插件目录的收录与实测：[awesome-deepseek-harness](https://github.com/0xsline/awesome-deepseek-harness)、[awesome-dsh-plugins](https://github.com/kejixiaoliang/awesome-dsh-plugins)、[WhaleHub](https://github.com/vvlife/whalehub-dsh)、[dshbase](https://dshbase.com/zh/plugins/dsh-whale-musume/)、[dsh-meme-hub](https://github.com/the-beating-light-of-the-nail/dsh-meme-hub)
 
 ## License
