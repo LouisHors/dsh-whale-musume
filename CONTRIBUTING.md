@@ -3,8 +3,8 @@
 ## 开发环境
 
 - Node.js 18+
-- DeepSeek Harness 0.1.0-rc.x（旧版 Web）与/或 **DeepSeek Harness 桌面端**（Electron 壳，内嵌 DSH 0.2.0-rc.2）——推荐使用独立副本做验证，避免污染主安装
-- 桌面端适配的契约依据见 `docs/desktop-0.2.0-rc.2-contract.md`；改动涉及选择器/信号时请一并核对那份文档
+- DeepSeek Harness 0.1.0-rc.x（旧版 Web）与/或 **DeepSeek Harness 桌面端**（Electron 壳，内嵌 DSH 0.2.0-rc.2 或 0.2.1-rc.2）——推荐使用独立副本做验证，避免污染主安装
+- 桌面端契约依据见 `docs/desktop-0.2.0-rc.2-contract.md`（0.2.0-rc.2 实机审计）与 `docs/desktop-0.2.1-rc.2-contract.md`（0.2.1-rc.2 静态差分）；改动涉及选择器/信号时请一并核对
 
 ## 修改与验证
 

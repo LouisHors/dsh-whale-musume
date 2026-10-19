@@ -179,7 +179,7 @@ More: [interaction board](docs/images/actions-board.png) · [new artwork board](
 - **Artwork preloading**: the first screen loads only 5 common poses, the remaining 90+ are fetched one at a time every 120 ms while idle, so cold pose switches never stall; failures are silent
 - **Accessibility mode** (off by default): Tab focus, Enter/Space to pat, arrow keys to nudge position (Shift to speed up), state changes announced through `aria-live`
 - **Theme following**: follows the host's light/dark theme for bubbles and menus only — **artwork is never filtered**, so the art style is preserved
-- **Testable**: the state machine and the presentation layer are separate; 158 unit tests run with plain `node --test`
+- **Testable**: the state machine and the presentation layer are separate; unit tests run with plain `node --test`
 
 ---
 
@@ -187,7 +187,8 @@ More: [interaction board](docs/images/actions-board.png) · [new artwork board](
 
 | Host | Support | Notes |
 |---|:---:|---|
-| **DeepSeek Harness Desktop** (Electron shell, bundled DSH `0.2.0-rc.2`) | ✅ tested | GUI defaults to `127.0.0.1:19387`; restart the app after installing. See the [desktop deployment guide](docs/desktop-0.2.0-rc.2-deploy.md) |
+| **DeepSeek Harness Desktop** `0.2.0-rc.2` | ✅ tested | That build's GUI defaulted to `127.0.0.1:19387`. Install and rollback: [0.2.0 deploy guide](docs/desktop-0.2.0-rc.2-deploy.md) |
+| **DeepSeek Harness Desktop / Web** `0.2.1-rc.1`, `0.2.1-rc.2` | ✅ static contract | Checked against tag `dsh-v0.2.1-rc.2` and the unit tests. **Not** re-run inside the Electron app. Desktop 0.2.1 binds with `--port 0` (OS-assigned); do not assume `19387`. See the [0.2.1 contract](docs/desktop-0.2.1-rc.2-contract.md) and [deploy delta](docs/desktop-0.2.1-rc.2-deploy.md) |
 | **Legacy web profile** (DSH `0.1.x`) | ✅ tested | `0.1.0-rc.6` and newer; the settings panel is verified on `0.1.1-rc.2` |
 | Other profiles (headless / acp, …) | ➖ no UI | There is no browser surface, so there is nowhere to show a pet |
 
@@ -217,6 +218,8 @@ When porting to the desktop app we audited every contract against the real `0.2.
 | Onboarding modal | Present on every fresh load | No longer mistaken for the settings page (which used to hide the mascot) |
 
 All of these have regression assertions in `test/desktop-client.test.mjs` (34 of them).
+
+v2.4.0 re-checked tag `dsh-v0.2.1-rc.2` ([`docs/desktop-0.2.1-rc.2-contract.md`](docs/desktop-0.2.1-rc.2-contract.md)). Those markers are still there, so no selector changed. The install gate did: since DSH `0.2.1-alpha.4`, top-level `engines.dsh` wins. This package declares `>=0.1.0-rc.6 <0.2.0-rc.1 || 0.2.0-rc.2 || 0.2.1-rc.1 || 0.2.1-rc.2`. Marking `0.2.1-rc.1` / `0.2.1-rc.2` compatible means that static check plus unit tests, not a live desktop run.
 
 </details>
 
@@ -313,6 +316,7 @@ node scripts/apply-theme.mjs --rollback "<backup dir>"
 
 | Version | Date | Theme | Highlights | Links |
 |---|---|---|---|---|
+| **v2.4.0** | 2026-10-19 | DSH 0.2.1-rc.2 support | Declares `engines.dsh`; `0.2.1-rc.1` / `0.2.1-rc.2` marked compatible from a static contract (not a live Electron run); `0.2.0-rc.2` and legacy Web stay allowed; no selector changes | [Release](https://github.com/Sutera-Diffusus/dsh-whale-musume/releases/tag/v2.4.0) · [Notes](docs/release-notes-v2.4.0.md) |
 | **v2.3.0** | 2026-10-14 | Two work-speech modes + menu placement fix | See highlights below | [Release](https://github.com/Sutera-Diffusus/dsh-whale-musume/releases/tag/v2.3.0) · [Notes](docs/release-notes-v2.3.0.md) |
 | **v2.2.1** | 2026-10-01 | Popups stay on screen at screen edges | See highlights below | [Release](https://github.com/Sutera-Diffusus/dsh-whale-musume/releases/tag/v2.2.1) · [Notes](docs/release-notes-v2.2.1.md) |
 | **v2.2.0** | 2026-09-29 | DeepSeek Harness Desktop support | Desktop (Electron shell, bundled DSH `0.2.0-rc.2`): lazy-CJS boot timing, DOM contract (`[data-tool]` / `[data-chat-running]` / `[data-terminal]` / contenteditable composer), theme attribute (`body[data-ds-dark-theme]`), settings-panel detection; fixes a false "working" state on first paint | [Release](https://github.com/Sutera-Diffusus/dsh-whale-musume/releases/tag/v2.2.0) · [Notes](docs/release-notes-v2.2.0.md) |
@@ -470,8 +474,9 @@ dsh-whale-musume/
 │  ├─ build-review.py               # artwork review page
 │  └─ slice-batch.py                # poster slicing
 ├─ test/
-│  ├─ *.test.mjs                    # unit and contract tests (158)
+│  ├─ *.test.mjs                    # unit and contract tests
 │  ├─ desktop-client.test.mjs       # desktop (0.2.0-rc.2) contract and regression assertions
+│  ├─ dsh-engines.test.mjs          # engines.dsh range and the 0.2.1 matrix
 │  ├─ cdp-whale-moe.mjs             # full CDP acceptance for the legacy web host
 │  ├─ motion-qa.mjs / soak-work.mjs # motion quality and 60s soak
 │  └─ showcase-*.mjs                # artwork/action board generators
@@ -481,10 +486,12 @@ dsh-whale-musume/
 │  ├─ cdp-contract-whale.mjs        # one-shot headless contract checks
 │  └─ asar.mjs                      # read-only asar tool (desktop recon)
 ├─ docs/
-│  ├─ desktop-0.2.0-rc.2-contract.md    # desktop contract audit (file:line evidence)
+│  ├─ desktop-0.2.0-rc.2-contract.md    # 0.2.0-rc.2 contract audit (live)
 │  ├─ desktop-0.2.0-rc.2-deploy.md      # desktop deploy/rollback/uninstall guide
-│  ├─ desktop-0.2.0-rc.2-acceptance.md  # desktop acceptance report
-│  ├─ release-notes-v2.2.0.md           # release notes for this version
+│  ├─ desktop-0.2.0-rc.2-acceptance.md  # 0.2.0-rc.2 acceptance report
+│  ├─ desktop-0.2.1-rc.2-contract.md    # 0.2.1-rc.2 contract delta (static, no Electron run)
+│  ├─ desktop-0.2.1-rc.2-deploy.md      # 0.2.1 deploy delta against the 0.2.0 guide
+│  ├─ release-notes-v2.4.0.md           # v2.4.0 release notes
 │  └─ images/                       # logo, screenshots, artwork boards
 ├─ .github/
 │  ├─ workflows/test.yml            # CI: npm test on Node 18 / 22
@@ -499,7 +506,7 @@ dsh-whale-musume/
 ## Development & Testing
 
 ```powershell
-# unit and contract tests (158, no browser or server needed)
+# unit and contract tests (no browser or server needed)
 npm test
 
 # equivalent explicit form
@@ -512,7 +519,7 @@ node test/motion-qa.mjs
 node test/cdp-whale-moe.mjs
 ```
 
-Conventions live in [CONTRIBUTING.md](CONTRIBUTING.md): after touching the presentation layer in `assets/`, run `npm test`; for desktop selector/signal changes, cross-check [`docs/desktop-0.2.0-rc.2-contract.md`](docs/desktop-0.2.0-rc.2-contract.md).
+Conventions live in [CONTRIBUTING.md](CONTRIBUTING.md): after touching the presentation layer in `assets/`, run `npm test`; for desktop selector/signal changes, cross-check [`docs/desktop-0.2.0-rc.2-contract.md`](docs/desktop-0.2.0-rc.2-contract.md) and [`docs/desktop-0.2.1-rc.2-contract.md`](docs/desktop-0.2.1-rc.2-contract.md).
 
 ---
 

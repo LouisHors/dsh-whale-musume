@@ -1,5 +1,22 @@
 # Changelog
 
+## v2.4.0 (2026-10-19)
+
+### 适配
+
+- **声明兼容 DSH `0.2.1-rc.1` / `0.2.1-rc.2`**：对照 tag `dsh-v0.2.1-rc.2` 的源码，鲸鱼娘用到的 DOM 标记（`[data-tool]` + `data-state`、`[data-chat-running]`、`[data-terminal]`、`[data-composer-input]`、`[data-shortcut-modal="settings"]`、`body[data-ds-dark-theme]`）和 `settings.section` 注册都还在，表现层选择器没有增删。`conversation.input.model.label` 是新 slot，本插件不注册
+- **补上顶层 `engines.dsh`**：从 DSH `0.2.1-alpha.4` 起，安装门禁优先读这个字段；没声明才回落 `@deepseek-ai/dsh*` peer。本包没有那些 peer，不声明就等于任何版本都放行。范围是 `>=0.1.0-rc.6 <0.2.0-rc.1 || 0.2.0-rc.2 || 0.2.1-rc.1 || 0.2.1-rc.2`，旧版 Web（`0.1.0-rc.6` 起）和已实测的桌面端 `0.2.0-rc.2` 仍放行；`0.2.0-rc.1`、`0.2.1-alpha.*` 与 `0.2.1` 正式版不放行
+- **兼容性矩阵**：`dsh.compatibility.dshReleases` 增加 `0.2.1-rc.1` 与 `0.2.1-rc.2`，值为 `compatible`。这个字段 0.2.1 的安装器不读；`compatible` 的依据是静态契约加单元测试，**不是**在真实 Electron 桌面端复跑的验收。`0.2.0-rc.2` 仍是隔离 profile 上验收过的版本
+- **桌面端端口**：0.2.1 的 desktop host 用 `--port 0`（系统分配），不再写死 `19387`。插件不读端口。文档 origin 仍是 `dsh-app://app`，资源路由仍避开 `/assets/`
+
+### 文档
+
+- 新增 `docs/desktop-0.2.1-rc.2-contract.md`（契约差分）与 `docs/desktop-0.2.1-rc.2-deploy.md`（相对 0.2.0 部署手册的差分）。0.2.0-rc.2 的验收报告不改写
+
+### 测试
+
+- 单元 **158 → 163 全绿**：新增 `test/dsh-engines.test.mjs`（5 项：版本与 `engines.dsh` 字面量、矩阵保留旧条目并写入 0.2.1 rc、放行表、拒绝表、表现层标记仍在且不注册模型名 slot）
+
 ## v2.3.0 (2026-10-14)
 
 ### 新增

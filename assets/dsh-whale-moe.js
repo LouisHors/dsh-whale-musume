@@ -22,7 +22,10 @@
     { key: "particles", label: "粒子效果" }
   ];
 
-  /* 0.2.0-rc.2 实测（CDP + 客户端 bundle 双向核对）：
+  /* 0.2.1-rc.2 静态复核（tag dsh-v0.2.1-rc.2，未跑真实 Electron）：下面这些
+     0.2.0-rc.2 标记仍在源码里，本文件选择器无增删。新增的
+     conversation.input.model.label 本插件不注册。
+     0.2.0-rc.2 实测（CDP + 客户端 bundle 双向核对）：
      · 刷新后常驻一个 role="dialog" 的「预览版说明」引导弹窗（OnboardingModal），
        用 [role="dialog"] 判「设置页」会把首页判成设置页。上游 v2.1.0 已把该场景
        从「整体隐藏」改成「右下 mini」，但判据仍会在桌面端把首页误认成设置页；

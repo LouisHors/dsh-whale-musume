@@ -179,7 +179,7 @@ window.__dshWhaleMoeDebug                                      // state 非 "hid
 - **立绘预加载**：首屏只预载 5 张常用姿势，其余 90+ 张在空闲时段每 120ms 取一张，冷启动切姿势不迟滞；预取失败完全静默
 - **无障碍模式**（默认关闭）：可 Tab 聚焦、Enter / 空格摸头、方向键微调位置（Shift 加速），状态变化经 `aria-live` 播报
 - **主题跟随**：跟随宿主明暗主题，只影响气泡/菜单这类 UI，**立绘不做滤镜**，不改画风
-- **可测试性**：核心状态机与表现层分离，158 项单元测试可直接 `node --test` 跑
+- **可测试性**：核心状态机与表现层分离，单元测试可直接 `node --test` 跑
 
 ---
 
@@ -187,7 +187,8 @@ window.__dshWhaleMoeDebug                                      // state 非 "hid
 
 | 宿主 | 支持 | 说明 |
 |---|:---:|---|
-| **DeepSeek Harness 桌面端**（Electron 壳，内嵌 DSH `0.2.0-rc.2`） | ✅ 已实测 | GUI 端口默认 `127.0.0.1:19387`；装完需重启桌面端。安装/回滚步骤见[桌面端部署手册](docs/desktop-0.2.0-rc.2-deploy.md) |
+| **DeepSeek Harness 桌面端** `0.2.0-rc.2` | ✅ 已实测 | 那个构建的 GUI 默认 `127.0.0.1:19387`。安装/回滚见[0.2.0 部署手册](docs/desktop-0.2.0-rc.2-deploy.md) |
+| **DeepSeek Harness 桌面端 / Web** `0.2.1-rc.1`、`0.2.1-rc.2` | ✅ 静态契约 | 对照 tag `dsh-v0.2.1-rc.2` 的源码与单元测试，**没有**在真实 Electron 里复跑。0.2.1 的桌面端端口改为系统分配（`--port 0`），不要再假设 `19387`。差分见[0.2.1 契约](docs/desktop-0.2.1-rc.2-contract.md)与[部署差分](docs/desktop-0.2.1-rc.2-deploy.md) |
 | **旧版 Web profile**（DSH `0.1.x`） | ✅ 已实测 | `0.1.0-rc.6` 及以上；设置面板在 `0.1.1-rc.2` 实测 |
 | 其他 profile（headless / acp 等） | ➖ 无界面 | 没有浏览器界面，桌宠无处显示 |
 
@@ -217,6 +218,8 @@ v2.2.0 适配桌面端时，逐条核对了 DSH `0.2.0-rc.2` 的真实契约并�
 | 引导弹窗 | 刷新后常驻的 OnboardingModal | 不再误判为设置页（否则桌宠会被隐藏） |
 
 这些行为都补了回归断言（`test/desktop-client.test.mjs`，34 项）。
+
+v2.4.0 又对照了 tag `dsh-v0.2.1-rc.2`（见 [`docs/desktop-0.2.1-rc.2-contract.md`](docs/desktop-0.2.1-rc.2-contract.md)）：上表这些标记都还在，选择器没有改。变的是安装门禁——从 DSH `0.2.1-alpha.4` 起优先读顶层 `engines.dsh`。本包的范围是 `>=0.1.0-rc.6 <0.2.0-rc.1 || 0.2.0-rc.2 || 0.2.1-rc.1 || 0.2.1-rc.2`。`0.2.1-rc.1` / `0.2.1-rc.2` 标成 compatible 的依据是这份静态核对加单元测试，不是实机验收。
 
 </details>
 
@@ -313,6 +316,7 @@ node scripts/apply-theme.mjs --rollback "<backup dir>"
 
 | 版本 | 日期 | 主题 | 要点 | 链接 |
 |---|---|---|---|---|
+| **v2.4.0** | 2026-10-19 | 适配 DSH 0.2.1-rc.2 | 补 `engines.dsh`；`0.2.1-rc.1` / `0.2.1-rc.2` 按静态契约标为 compatible（未跑真实 Electron）；0.2.0-rc.2 与旧版 Web 仍放行；DOM 选择器无增删 | [Release](https://github.com/Sutera-Diffusus/dsh-whale-musume/releases/tag/v2.4.0) · [说明](docs/release-notes-v2.4.0.md) |
 | **v2.3.0** | 2026-10-14 | 工作中台词两档 + 菜单不再被裁 | 见下方要点 | [Release](https://github.com/Sutera-Diffusus/dsh-whale-musume/releases/tag/v2.3.0) · [Notes](docs/release-notes-v2.3.0.md) |
 | **v2.2.1** | 2026-10-01 | 贴边不再跑出屏幕 | 见下方要点 | [Release](https://github.com/Sutera-Diffusus/dsh-whale-musume/releases/tag/v2.2.1) · [Notes](docs/release-notes-v2.2.1.md) |
 | **v2.2.0** | 2026-09-29 | 适配 DeepSeek Harness 桌面端 | 桌面端（Electron 壳，内嵌 DSH `0.2.0-rc.2`）适配：惰性 CJS 引导时机、DOM 契约（`[data-tool]` / `[data-chat-running]` / `[data-terminal]` / contenteditable 输入框）、主题属性（`body[data-ds-dark-theme]`）、设置面板判据；修复首屏误判工作态 | [Release](https://github.com/Sutera-Diffusus/dsh-whale-musume/releases/tag/v2.2.0) · [说明](docs/release-notes-v2.2.0.md) |
@@ -492,8 +496,9 @@ dsh-whale-musume/
 │  ├─ build-review.py               # 立绘审阅页
 │  └─ slice-batch.py                # 海报切图
 ├─ test/
-│  ├─ *.test.mjs                    # 单元与契约测试（142 项）
+│  ├─ *.test.mjs                    # 单元与契约测试
 │  ├─ desktop-client.test.mjs       # 桌面端（0.2.0-rc.2）契约与回归断言
+│  ├─ dsh-engines.test.mjs          # engines.dsh 与 0.2.1 矩阵
 │  ├─ cdp-whale-moe.mjs             # 旧版 Web 的 CDP 全量验收
 │  ├─ motion-qa.mjs / soak-work.mjs # 动效质量与 60s 压测
 │  └─ showcase-*.mjs                # 立绘/动作总览生成
@@ -503,10 +508,12 @@ dsh-whale-musume/
 │  ├─ cdp-contract-whale.mjs        # 一次性 headless 契约验收
 │  └─ asar.mjs                      # 只读 asar 工具（桌面端勘察）
 ├─ docs/
-│  ├─ desktop-0.2.0-rc.2-contract.md    # 桌面端契约审计（逐条带源码行号）
+│  ├─ desktop-0.2.0-rc.2-contract.md    # 桌面端 0.2.0-rc.2 契约审计（实机）
 │  ├─ desktop-0.2.0-rc.2-deploy.md      # 桌面端部署/回滚/卸载手册
-│  ├─ desktop-0.2.0-rc.2-acceptance.md  # 桌面端验收报告
-│  ├─ release-notes-v2.2.0.md           # 本版 Release 说明
+│  ├─ desktop-0.2.0-rc.2-acceptance.md  # 桌面端 0.2.0-rc.2 验收报告
+│  ├─ desktop-0.2.1-rc.2-contract.md    # 0.2.1-rc.2 契约差分（静态，未跑 Electron）
+│  ├─ desktop-0.2.1-rc.2-deploy.md      # 0.2.1 相对 0.2.0 手册的部署差分
+│  ├─ release-notes-v2.4.0.md           # v2.4.0 Release 说明
 │  └─ images/                       # logo、运行截图与立绘总览
 ├─ .github/
 │  ├─ workflows/test.yml            # CI：Node 18 / 22 上跑 npm test
@@ -521,7 +528,7 @@ dsh-whale-musume/
 ## 开发与测试
 
 ```powershell
-# 单元与契约测试（142 项，无需浏览器/服务器）
+# 单元与契约测试（无需浏览器/服务器）
 npm test
 
 # 等价命令（显式列出全部测试文件）
@@ -534,7 +541,7 @@ node test/motion-qa.mjs
 node test/cdp-whale-moe.mjs
 ```
 
-开发约定见 [CONTRIBUTING.md](CONTRIBUTING.md)：改动 `assets/` 表现层后请一并跑 `npm test`，涉及桌面端选择器/信号的改动请核对 [`docs/desktop-0.2.0-rc.2-contract.md`](docs/desktop-0.2.0-rc.2-contract.md)。
+开发约定见 [CONTRIBUTING.md](CONTRIBUTING.md)：改动 `assets/` 表现层后请一并跑 `npm test`，涉及桌面端选择器/信号的改动请核对 [`docs/desktop-0.2.0-rc.2-contract.md`](docs/desktop-0.2.0-rc.2-contract.md) 与 [`docs/desktop-0.2.1-rc.2-contract.md`](docs/desktop-0.2.1-rc.2-contract.md)。
 
 ---
 

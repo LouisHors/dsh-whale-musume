@@ -23,7 +23,7 @@
 
 ## 自测清单
 
-- [ ] `npm test` 全绿（`node --test test/*test.mjs`，当前 142 项）。CI `.github/workflows/test.yml` 会在 Node.js 18 与 22 上跑同一条命令
+- [ ] `npm test` 全绿（`node --test test/*test.mjs`，当前 163 项）。CI `.github/workflows/test.yml` 会在 Node.js 18 与 22 上跑同一条命令
 - [ ] 手工验证过改动路径：写清怎么点、看到什么（下文「手工验证场景」）
 - [ ] 已确认是否影响旧版 Web（DSH 0.1.x）行为：不受影响 / 已同步适配 / 不适用（说明理由）
 - [ ] 未改动 `assets/` 表现层的信号选择器；若改动了，已在下文写明依据（对应的 DSH 版本、DOM 契约文档或实测证据，选择器只增不减、旧宿主行为不受影响）
