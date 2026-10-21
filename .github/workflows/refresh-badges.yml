@@ -30,6 +30,10 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # release 事件默认 checkout 到 tag（detached HEAD），此时末尾的 git push 会失败。
+          # 固定检出 main，让「发布后刷新下载量」也能正常提交。
+          ref: main
 
       - name: Setup Node
         uses: actions/setup-node@v4
