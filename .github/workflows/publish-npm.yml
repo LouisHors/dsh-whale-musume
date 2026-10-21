@@ -1,0 +1,45 @@
+## 发布到 npm
+##
+## 为什么单独一个工作流：GitHub 安装需要 git ls-remote 预检，部分网络环境下会失败
+## （issue #21 / #29）；npm 包安装走 registry，不需要 git，也能让 dsh 的
+## Discover / plugin_market 索引识别到「有 npm 版本」的插件。
+##
+## 前置：在仓库 Settings → Secrets and variables → Actions 添加 NPM_TOKEN。
+## Token 需要 npmjs.com 的 publish 权限；建议用 granular token，只授权本包。
+## 没配置 token 时，发布步骤会跳过（不会让 Release 流程变红）。
+name: publish-npm
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    env:
+      NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+
+      - name: Test
+        run: node --test test/*test.mjs
+
+      - name: Publish if NPM_TOKEN is configured
+        if: ${{ env.NODE_AUTH_TOKEN != '' }}
+        run: npm publish --access public --provenance
+
+      - name: Skip notice
+        if: ${{ env.NODE_AUTH_TOKEN == '' }}
+        run: echo "NPM_TOKEN 未配置，跳过 npm 发布；添加 secret 后可手动重跑本工作流。"

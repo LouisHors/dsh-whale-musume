@@ -1,7 +1,6 @@
 {
   "name": "dsh-whale-musume",
   "version": "2.5.0",
-  "private": true,
   "description": "鲸鱼娘桌面宠物（看板娘 / desktop pet mascot）for DeepSeek Harness：陪你写代码的 whale-girl 桌宠，桌面端与 Web 双端支持",
   "publishConfig": {
     "access": "public"
@@ -18,16 +17,23 @@
   },
   "files": [
     "lib",
-    "assets",
+    "assets/generated",
+    "assets/dsh-whale-moe.css",
+    "assets/dsh-whale-moe.js",
+    "assets/whale-moe-core.js",
+    "assets/peek-calibration.json",
     "cordis.patch.yml"
   ],
   "scripts": {
     "test": "node --test test/*test.mjs",
+    "prepublishOnly": "node --test test/*test.mjs",
+    "publish:npm": "npm publish --access public --registry=https://registry.npmjs.org",
     "qa": "node test/motion-qa.mjs && node test/cdp-whale-moe.mjs",
     "qa:soak": "node test/soak-work.mjs"
   },
   "license": "MIT",
   "engines": {
+    "node": ">=18",
     "dsh": ">=0.1.0-rc.6 <0.2.0-rc.1 || 0.2.0-rc.2 || 0.2.1-rc.1 || 0.2.1-rc.2"
   },
   "dsh": {
