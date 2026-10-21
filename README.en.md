@@ -151,7 +151,7 @@ More: [interaction board](docs/images/actions-board.png) · [new artwork board](
 - **Daily quests**: three slots refreshed each day, each granting affection
 - **Weekly sign-in**: seven-slot board with 1 / 3 / 7-day milestone rewards
 - **Bond levels**: Lv3 unlocks a new idle action, Lv5 the title "Guardian of Whale Tide", Lv7 a hidden easter egg
-- **39 achievements + achievement wall**: interaction / companionship / DSH usage / minigames / quests; unlocked ones highlighted, locked ones dimmed
+- **45 achievements + achievement wall**: interaction / companionship / DSH usage / minigames / quests; unlocked ones highlighted, locked ones dimmed; new "Hundred-Day Pact", "One-Year Pact" and four memory-game achievements
 - **Growth journal**: records bond level-ups and achievement unlocks, newest 12 shown first
 
 ### 💬 Dialogue & companionship
@@ -170,7 +170,7 @@ More: [interaction board](docs/images/actions-board.png) · [new artwork board](
 - **Zone clicks**: head / belly / tail are separate hit zones, each with its own artwork, effects and lines
 - **Click effects**: hearts and stars fly out; three quick clicks trigger a starry-eyed celebration with particles and a spin
 - **90+ artworks**: idle, working, thinking, away, four growth states, four minigame states, three weather states, five festival sets (Christmas / Halloween / Mid-Autumn / Lunar New Year / Valentine's, switched automatically on the day)
-- **Mini-game "Bubble Pop Party"**: 4×4 grid, normal / star / bomb bubbles, combo scoring, 30-second rounds with three result tiers; playable by mouse and keyboard; three reward-bearing rounds per day to prevent farming
+- **Three mini-games**: **Bubble Pop Party** (4×4 grid, normal / star / bomb, combo scoring, 30-second rounds), **Snack Catch** (catch falling snacks with keyboard or mouse, avoid bombs), and **Whale Memory** (4×4 memory match reusing 16 existing artworks; 60 seconds, combo bonus, zero-mistake clear); all three share the three reward-bearing rounds per day and are playable by mouse and keyboard
 
 ### 🧩 Engineering
 
@@ -227,14 +227,15 @@ v2.4.0 re-checked tag `dsh-v0.2.1-rc.2` ([`docs/desktop-0.2.1-rc.2-contract.md`]
 
 ## First run
 
-Six things worth trying in the first minute:
+Seven things worth trying in the first minute:
 
 1. **Click her once** — blush artwork and a heart effect;
 2. **Click three times quickly** — starry-eyed celebration, particles, spin;
 3. **Drag her around** — "picked up" artwork, swaying with the cursor, then a short slide and a saved position;
-4. **Right-click her** — feed / poke / praise / bubble minigame / back to home / open settings;
+4. **Right-click her** — feed / poke / praise / three mini-games / back to home / open settings;
 5. **Run a tool call** — she picks up the laptop with a soft blue glow;
-6. **Open Settings → Mascot** — 15 toggles plus the work-speech two-mode switch, growth stats, achievement wall and growth journal live there.
+6. **Open Settings → Mascot** — 15 toggles plus the work-speech two-mode switch, growth stats, achievement wall and growth journal live there;
+7. **Before switching machines** — Settings → Mascot → Cross-device migration: export a save or copy a migration code.
 
 ---
 
@@ -253,6 +254,8 @@ Six things worth trying in the first minute:
 | Poke | Mood down, angry artwork |
 | Praise her | Mood and affection up, starry eyes |
 | Minigame: bubble pop | Opens the 30-second bubble party |
+| Minigame: snack catch | Catch snacks with keyboard or mouse, avoid bombs |
+| Minigame: whale memory | 4×4 memory match, 60 seconds, combo and zero-mistake bonuses |
 | Back to home | Clears the saved floating position |
 | Open settings | Jumps to DSH Settings → Mascot |
 
@@ -260,7 +263,7 @@ Six things worth trying in the first minute:
 
 ## Settings panel
 
-Path: **DSH Settings → Mascot** — 15 pill toggles, a Chatty / Quiet work-speech switch, and six collapsible groups.
+Path: **DSH Settings → Mascot** — 15 pill toggles, a Chatty / Quiet work-speech switch, and eight collapsible groups.
 
 | Group | Contents |
 |---|---|
@@ -268,11 +271,21 @@ Path: **DSH Settings → Mascot** — 15 pill toggles, a Chatty / Quiet work-spe
 | Weather | City, optional API key, weather effects toggle |
 | Balance | Balance care toggle, show-number toggle, current balance and tier |
 | Daily & growth | Today's quests / weekly sign-in / titles (tabbed) |
-| Achievement wall | 39 achievements, unlocked highlighted, locked dimmed |
+| Achievement wall | 45 achievements, unlocked highlighted, locked dimmed |
 | Growth journal | Bond level-ups and achievement unlocks, newest 12 first |
+| Cross-device migration | Export / import a save (JSON), or copy / paste a migration code; carries affection, level, achievements, quests, game records and journal |
 | Data & reset | Reset floating position, reset growth data |
 
 **Off by default** (these read conversation content or account amounts): keyword reactions, balance care, show-balance-number, TTS playback, accessibility.
+
+### Cross-device migration (desktop ↔ legacy web)
+
+Growth data lives in the host origin's `localStorage`, so it does not follow you to the desktop app, another machine or another profile. Entry: **Settings → Mascot → Cross-device migration**.
+
+- **Export save**: downloads a JSON file containing mood / affection / satiety / level / sign-in / achievements / quests / game records / growth journal / names. It **excludes** the floating position, weather city and coordinates.
+- **Copy migration code**: carries the core progress only (stats / achievements / journal / names) — handy for pasting into a chat window.
+- **Import**: pick the JSON file or paste a `WM1-…` code, confirm, and same-named data is overwritten; the mascot reloads immediately without a page refresh.
+- The code has a checksum: a truncated copy fails with a clear error and **never touches your existing save**.
 
 ---
 
@@ -316,6 +329,7 @@ node scripts/apply-theme.mjs --rollback "<backup dir>"
 
 | Version | Date | Theme | Highlights | Links |
 |---|---|---|---|---|
+| **v2.5.0** | 2026-10-21 | Memory game + migration | Third mini-game "Whale Memory" (16 existing artworks, 60 s, combo / zero-mistake); new "Cross-device migration" settings group (JSON export/import + migration code, hot reload); six new achievements (four memory + hundred-day / one-year), 45 total | [Release](https://github.com/Sutera-Diffusus/dsh-whale-musume/releases/tag/v2.5.0) · [Notes](docs/release-notes-v2.5.0.md) |
 | **v2.4.0** | 2026-10-19 | DSH 0.2.1-rc.2 support | Declares `engines.dsh`; `0.2.1-rc.1` / `0.2.1-rc.2` marked compatible from a static contract (not a live Electron run); `0.2.0-rc.2` and legacy Web stay allowed; no selector changes | [Release](https://github.com/Sutera-Diffusus/dsh-whale-musume/releases/tag/v2.4.0) · [Notes](docs/release-notes-v2.4.0.md) |
 | **v2.3.0** | 2026-10-14 | Two work-speech modes + menu placement fix | See highlights below | [Release](https://github.com/Sutera-Diffusus/dsh-whale-musume/releases/tag/v2.3.0) · [Notes](docs/release-notes-v2.3.0.md) |
 | **v2.2.1** | 2026-10-01 | Popups stay on screen at screen edges | See highlights below | [Release](https://github.com/Sutera-Diffusus/dsh-whale-musume/releases/tag/v2.2.1) · [Notes](docs/release-notes-v2.2.1.md) |
@@ -336,7 +350,7 @@ node scripts/apply-theme.mjs --rollback "<backup dir>"
 | Item | Fact |
 |---|---|
 | Storage | The host window's `localStorage`, keys prefixed `whale-moe:` (desktop origin is `dsh-app://app`) |
-| Cross-host migration | **None**: desktop and legacy web have different origins, so the data is separate |
+| Cross-host migration | **Manual, local-only**: Settings → Mascot → Cross-device migration exports a JSON save or a `WM1-…` code (core progress). Nothing is uploaded; you move the file or string yourself |
 | Telemetry | **None.** No uploads, no analytics |
 | External requests | **Zero by default.** Weather only after you enter a city (Open-Meteo, free, no key); an empty city means no networking at all |
 | Balance feature | **Off by default.** When enabled it only talks to the **local** balance proxy `127.0.0.1:3020` (the upstream call happens on the proxy side); with "show number" off, the UI only shows tier wording so screenshots never leak amounts |
@@ -359,7 +373,7 @@ node scripts/apply-theme.mjs --rollback "<backup dir>"
 <details>
 <summary><b>My desktop data is empty — where did my affection and achievements go?</b></summary>
 
-Expected: the desktop origin is `dsh-app://app`, which is not the same storage domain as the legacy web UI's `http://127.0.0.1:<port>`, so `whale-moe:*` does not carry over. There is no built-in migration tool yet, so you start fresh on the new host.
+Expected: the desktop origin is `dsh-app://app`, which is not the same storage domain as the legacy web UI's `http://127.0.0.1:<port>`, so `whale-moe:*` does not carry over automatically. Since v2.5.0 you can migrate it yourself: **Settings → Mascot → Cross-device migration** — export a save on the old host, then import it on the new one (or copy/paste the `WM1-…` code).
 </details>
 
 <details>
@@ -441,7 +455,7 @@ Then **restart the desktop app** (a page refresh is not enough). Sanity checks: 
 
 No dates promised, but the direction is clear. Vote or add ideas in [Discussions](https://github.com/Sutera-Diffusus/dsh-whale-musume/discussions) or [Issues](https://github.com/Sutera-Diffusus/dsh-whale-musume/issues).
 
-- **Cross-host growth-data migration**: export/import between the desktop app and legacy web (the missing migration is the biggest experience gap today)
+- **Incremental merge for exported saves**: import currently overwrites same-named data; a "top up progress, never downgrade" merge mode is planned
 - **Desktop acceptance scripts**: `npm run qa` still assumes the legacy web host and needs a desktop-oriented version
 - **English docs parity**: bring the docs up to the same level as the Chinese ones
 - **Optional character packs**: extract a presentation-layer interface so other people can swap in their own character
@@ -491,6 +505,7 @@ dsh-whale-musume/
 │  ├─ desktop-0.2.0-rc.2-acceptance.md  # 0.2.0-rc.2 acceptance report
 │  ├─ desktop-0.2.1-rc.2-contract.md    # 0.2.1-rc.2 contract delta (static, no Electron run)
 │  ├─ desktop-0.2.1-rc.2-deploy.md      # 0.2.1 deploy delta against the 0.2.0 guide
+│  ├─ release-notes-v2.5.0.md           # v2.5.0 release notes
 │  ├─ release-notes-v2.4.0.md           # v2.4.0 release notes
 │  └─ images/                       # logo, screenshots, artwork boards
 ├─ .github/

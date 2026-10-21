@@ -424,6 +424,9 @@ test("g1 无 renderSlot 时设置面板回落到内置面板并物化出元素�
   const text = renderedText(tree);
   assert.ok(text.includes("如何称呼我"), "内置面板缺少「如何称呼我」行,面板可能渲染成空壳");
   assert.ok(text.includes("鲸鱼娘"), "内置面板缺少开关行文案");
+  assert.ok(text.includes("跨端迁移"), "内置面板缺少 v2.5.0 的跨端迁移分组");
+  assert.ok(text.includes("导出存档"), "跨端迁移卡片缺少导出按钮");
+  assert.ok(text.includes("导入迁移码"), "跨端迁移卡片缺少迁移码导入入口");
   assert.ok(text.includes("重置养成"), "内置面板缺少重置区");
   assert.equal(env.errors().length, 0, `物化面板不应产生错误:${JSON.stringify(env.errors())}`);
 });

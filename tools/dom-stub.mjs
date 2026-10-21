@@ -58,6 +58,10 @@ class StubEvent {
   constructor(type, init = {}) {
     this.type = String(type);
     this.detail = init.detail;
+    this.key = init.key;
+    this.clientX = init.clientX;
+    this.clientY = init.clientY;
+    this.button = init.button;
     this.bubbles = Boolean(init.bubbles);
     this.cancelable = Boolean(init.cancelable);
     this.defaultPrevented = false;

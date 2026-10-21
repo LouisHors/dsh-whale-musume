@@ -599,7 +599,7 @@
      只要桌宠本身在视口内，菜单就完整可见。 */
   var MENU_MARGIN = 8;
   var MENU_FALLBACK_W = 180;
-  var MENU_FALLBACK_H = 268;
+  var MENU_FALLBACK_H = 306; /* 9 项（开小游戏）：投喂/戳/夸夸 + 3 个游戏 + 回到原位/设置/关闭 */
   function placeMenu(anchorX, anchorY, menuW, menuH, viewW, viewH, margin) {
     var gap = margin === undefined ? MENU_MARGIN : margin;
     var width = menuW > 1 ? menuW : MENU_FALLBACK_W;
@@ -629,6 +629,7 @@
     if (readPref("game")) {
       items.push({ label: "小游戏：戳泡泡", action: function () { openGame(); } });
       items.push({ label: "小游戏：接点心", action: function () { openCatchGame(); } });
+      items.push({ label: "小游戏：鲸鱼翻翻乐", action: function () { openMemoryGame(); } });
     }
     items.push(
       { label: "回到原位", action: function () { try { root.localStorage.removeItem("whale-moe:floatX"); root.localStorage.removeItem("whale-moe:floatY"); } catch (e) { /* ignore */ } reconcile(); } },
@@ -995,6 +996,7 @@
     if (gameOpen) return;
     if (detectView() === "settings") return; /* 看板娘在设置页隐藏，无入口;此处防御 */
     if (catchOpen) closeCatchGame();
+    if (memoryOpen) closeMemoryGame();
     loadGameStats();
     gameState = core.gameNewState(Date.now(), Math.random);
     gameOpen = true;
@@ -1279,6 +1281,7 @@
     if (catchOpen) return;
     if (detectView() === "settings") return;
     if (gameOpen) closeGame();
+    if (memoryOpen) closeMemoryGame();
     loadGameStats();
     catchState = core.catchNewState(Date.now(), Math.random);
     catchOpen = true;
@@ -1294,6 +1297,308 @@
     settleGame(catchPanel(), result, function () { openCatchGame(); }, function () { closeCatchGame(); }, "接到 " + result.caught + " 个");
   }
 
+  /* ---------- mini game 3: memory match (whale memory) ---------- */
+
+  var MEMORY_COLS = 4;
+  var memoryState = null;
+  var memoryOpen = false;
+  var memoryTimer = null;
+  var memoryCursor = 0;
+  var memoryStats = null;
+
+  function memoryPanel() {
+    return doc.querySelector("[data-dsh-whale-memory]");
+  }
+
+  function loadMemoryStats() {
+    loadGameStats();
+    if (!gameStats.memory || typeof gameStats.memory !== "object") {
+      gameStats.memory = { plays: 0, wins: 0, perfect: 0, best: 0, comboMax: 0 };
+    }
+    memoryStats = gameStats.memory;
+    return memoryStats;
+  }
+
+  function closeMemoryGame() {
+    memoryOpen = false;
+    if (memoryTimer) { root.clearInterval(memoryTimer); memoryTimer = null; }
+    var panel = memoryPanel();
+    if (panel) panel.remove();
+    schedule();
+  }
+
+  function ensureMemoryPanel() {
+    var existing = memoryPanel();
+    if (existing) { existing.focus(); return existing; }
+    var panel = doc.createElement("div");
+    panel.setAttribute("data-dsh-whale-memory", "true");
+    panel.setAttribute("role", "region");
+    panel.setAttribute("aria-label", "小游戏：鲸鱼翻翻乐");
+    panel.setAttribute("tabindex", "-1");
+    var head = doc.createElement("div");
+    head.setAttribute("data-dsh-whale-memory-head", "true");
+    var score = doc.createElement("span");
+    score.setAttribute("data-dsh-whale-memory-score", "true");
+    score.textContent = "得分 0";
+    var time = doc.createElement("span");
+    time.setAttribute("data-dsh-whale-memory-time", "true");
+    time.textContent = "60s";
+    var best = doc.createElement("span");
+    best.setAttribute("data-dsh-whale-memory-best", "true");
+    best.textContent = "最佳 " + (memoryStats ? memoryStats.best : 0);
+    head.appendChild(score);
+    head.appendChild(time);
+    head.appendChild(best);
+    panel.appendChild(head);
+    var sub = doc.createElement("div");
+    sub.setAttribute("data-dsh-whale-memory-sub", "true");
+    var pairs = doc.createElement("span");
+    pairs.setAttribute("data-dsh-whale-memory-pairs", "true");
+    pairs.textContent = "配对 0/8";
+    var moves = doc.createElement("span");
+    moves.setAttribute("data-dsh-whale-memory-moves", "true");
+    moves.textContent = "步数 0";
+    sub.appendChild(pairs);
+    sub.appendChild(moves);
+    panel.appendChild(sub);
+    var grid = doc.createElement("div");
+    grid.setAttribute("data-dsh-whale-memory-grid", "true");
+    for (var i = 0; i < core.MEMORY.PAIRS * 2; i += 1) {
+      var btn = doc.createElement("button");
+      btn.type = "button";
+      btn.setAttribute("data-dsh-whale-memory-card", String(i));
+      btn.setAttribute("aria-label", "第 " + (i + 1) + " 张牌，未翻开");
+      var back = doc.createElement("span");
+      back.setAttribute("data-dsh-whale-memory-back", "true");
+      back.textContent = "🐚";
+      var img = doc.createElement("img");
+      img.setAttribute("data-dsh-whale-memory-face", "true");
+      img.alt = "";
+      img.hidden = true;
+      img.draggable = false;
+      btn.appendChild(img);
+      btn.appendChild(back);
+      (function (index) {
+        btn.addEventListener("click", function (event) {
+          event.stopPropagation();
+          memoryCursor = index;
+          onMemoryFlip(index);
+        });
+      })(i);
+      grid.appendChild(btn);
+    }
+    panel.appendChild(grid);
+    var paused = doc.createElement("div");
+    paused.setAttribute("data-dsh-whale-memory-paused", "true");
+    paused.textContent = "⏸ 页面已隐藏，回来继续";
+    paused.hidden = true;
+    panel.appendChild(paused);
+    doc.body.appendChild(panel);
+    panel.addEventListener("keydown", onMemoryKeydown);
+    panel.focus();
+    return panel;
+  }
+
+  function renderMemoryPanel() {
+    var panel = memoryPanel();
+    if (!panel || !memoryState) return;
+    var score = panel.querySelector("[data-dsh-whale-memory-score]");
+    var time = panel.querySelector("[data-dsh-whale-memory-time]");
+    var best = panel.querySelector("[data-dsh-whale-memory-best]");
+    var pairs = panel.querySelector("[data-dsh-whale-memory-pairs]");
+    var moves = panel.querySelector("[data-dsh-whale-memory-moves]");
+    if (score) score.textContent = "得分 " + memoryState.score;
+    if (time) time.textContent = Math.ceil(memoryState.remainingMs / 1000) + "s";
+    if (best) best.textContent = "最佳 " + (memoryStats ? memoryStats.best : 0);
+    if (pairs) pairs.textContent = "配对 " + memoryState.matched + "/" + core.MEMORY.PAIRS;
+    if (moves) moves.textContent = "步数 " + memoryState.moves;
+    var cards = panel.querySelectorAll("[data-dsh-whale-memory-card]");
+    for (var i = 0; i < cards.length; i += 1) {
+      var card = memoryState.cards[i];
+      var btn = cards[i];
+      var shown = !!(card && (card.flipped || card.matched));
+      btn.classList.toggle("dsh-whale-memory-flipped", shown);
+      btn.classList.toggle("dsh-whale-memory-matched", !!(card && card.matched));
+      btn.classList.toggle("dsh-whale-cursor", i === memoryCursor);
+      var img = btn.querySelector("[data-dsh-whale-memory-face]");
+      var back = btn.querySelector("[data-dsh-whale-memory-back]");
+      if (img) {
+        if (shown) {
+          var url = poseUrl(card.face);
+          if (img.getAttribute("src") !== url) img.src = url;
+          img.hidden = false;
+        } else {
+          img.hidden = true;
+        }
+      }
+      if (back) back.textContent = card && card.matched ? "✓" : "🐚";
+      btn.setAttribute("aria-pressed", shown ? "true" : "false");
+      btn.setAttribute("aria-label", "第 " + (i + 1) + " 张牌，" + (card && card.matched ? "已配对" : (shown ? "已翻开" : "未翻开")));
+    }
+  }
+
+  function memoryPaused() {
+    return !memoryOpen || doc.hidden;
+  }
+
+  function openMemoryGame() {
+    if (!readPref("game")) return;
+    if (memoryOpen) return;
+    if (detectView() === "settings") return; /* 设置页没有看板娘，防御性挡住入口 */
+    if (gameOpen) closeGame();
+    if (catchOpen) closeCatchGame();
+    loadMemoryStats();
+    memoryState = core.memoryNewState(Date.now(), Math.random, core.MEMORY_FACES);
+    memoryOpen = true;
+    memoryCursor = 0;
+    var panel = ensureMemoryPanel();
+    var oldOverlay = panel.querySelector("[data-dsh-whale-memory-overlay]");
+    if (oldOverlay) oldOverlay.remove();
+    var paused = panel.querySelector("[data-dsh-whale-memory-paused]");
+    if (paused) paused.hidden = true;
+    renderMemoryPanel();
+    showMood("game-think", 5000, true);
+    memoryTimer = root.setInterval(memoryTickLoop, 100);
+    schedule();
+  }
+
+  function memoryTickLoop() {
+    if (!memoryOpen || !memoryState) return;
+    var pausedBadge = doc.querySelector("[data-dsh-whale-memory-paused]");
+    if (memoryPaused()) {
+      if (pausedBadge) pausedBadge.hidden = false;
+      return;
+    }
+    if (pausedBadge) pausedBadge.hidden = true;
+    var out = core.memoryTick(memoryState, Date.now());
+    memoryState = out.state;
+    renderMemoryPanel();
+    if (memoryState.status === "ended") endMemoryGame(core.memoryResult(memoryState));
+  }
+
+  function onMemoryFlip(index) {
+    if (memoryPaused() || !memoryState || memoryState.status !== "playing") return;
+    var now = Date.now();
+    var out = core.memoryFlip(memoryState, index, now);
+    memoryState = out.state;
+    if (out.event === "match" || out.event === "win") {
+      var btn = doc.querySelector('[data-dsh-whale-memory-card="' + index + '"]');
+      if (btn) {
+        var rect = btn.getBoundingClientRect();
+        fxAt(rect.left + rect.width / 2, rect.top + rect.height / 2, "fx-ripple");
+      }
+      if (out.combo >= 3) showMood("game-happy", 1800, true);
+    }
+    if (out.event === "mismatch") {
+      var panel = memoryPanel();
+      if (panel) {
+        panel.classList.add("dsh-whale-memory-shake");
+        root.setTimeout(function () { panel.classList.remove("dsh-whale-memory-shake"); }, 420);
+      }
+    }
+    if (out.event === "timeout" || memoryState.status === "ended") {
+      endMemoryGame(core.memoryResult(memoryState));
+      return;
+    }
+    renderMemoryPanel();
+  }
+
+  function onMemoryKeydown(event) {
+    if (!memoryOpen) return;
+    var key = event.key;
+    if (key === "Escape") { event.preventDefault(); closeMemoryGame(); return; }
+    /* 焦点在某一格上时，方向键从这一格开始移动；Enter 也只翻这一格。
+       preventDefault 会阻止按钮的原生 click，避免一次按键翻两张。 */
+    var focused = event.target && typeof event.target.getAttribute === "function"
+      ? event.target.getAttribute("data-dsh-whale-memory-card")
+      : null;
+    if (focused !== null && focused !== "") memoryCursor = Number(focused) | 0;
+    if (key === "ArrowUp" || key === "ArrowDown" || key === "ArrowLeft" || key === "ArrowRight") {
+      event.preventDefault();
+      var row = Math.floor(memoryCursor / MEMORY_COLS);
+      var col = memoryCursor % MEMORY_COLS;
+      if (key === "ArrowUp") row = (row + MEMORY_COLS - 1) % MEMORY_COLS;
+      if (key === "ArrowDown") row = (row + 1) % MEMORY_COLS;
+      if (key === "ArrowLeft") col = (col + MEMORY_COLS - 1) % MEMORY_COLS;
+      if (key === "ArrowRight") col = (col + 1) % MEMORY_COLS;
+      memoryCursor = row * MEMORY_COLS + col;
+      renderMemoryPanel();
+      return;
+    }
+    if (key === "Enter" || key === " ") { event.preventDefault(); onMemoryFlip(memoryCursor); }
+  }
+
+  function memoryOverlay(panel, result, againFn, closeFn) {
+    var overlay = doc.createElement("div");
+    overlay.setAttribute("data-dsh-whale-memory-overlay", "true");
+    var title = doc.createElement("div");
+    title.textContent = result.grade === "win" ? "🎉 全部配对！" : (result.grade === "draw" ? "记住了大半！" : "再记一记～");
+    title.style.fontWeight = "700";
+    overlay.appendChild(title);
+    var detail = doc.createElement("div");
+    detail.textContent = "配对 " + result.matched + "/" + core.MEMORY.PAIRS + " · 步数 " + result.moves +
+      " · 最高连击 " + result.comboMax + " · 得分 " + result.score +
+      (result.grade === "win" && result.moves === core.MEMORY.PAIRS ? " · 零失误！" : "");
+    overlay.appendChild(detail);
+    var bestLine = doc.createElement("div");
+    bestLine.textContent = "最佳 " + (memoryStats ? memoryStats.best : 0);
+    bestLine.style.color = "var(--dsw-alias-label-secondary, #666)";
+    overlay.appendChild(bestLine);
+    var again = doc.createElement("button");
+    again.type = "button";
+    again.textContent = "再玩一局";
+    again.addEventListener("click", function (event) { event.stopPropagation(); againFn(); });
+    var close = doc.createElement("button");
+    close.type = "button";
+    close.textContent = "关闭";
+    close.addEventListener("click", function (event) { event.stopPropagation(); closeFn(); });
+    overlay.appendChild(again);
+    overlay.appendChild(close);
+    panel.appendChild(overlay);
+  }
+
+  function endMemoryGame(result) {
+    if (!memoryOpen) return;
+    memoryOpen = false;
+    if (memoryTimer) { root.clearInterval(memoryTimer); memoryTimer = null; }
+    var panel = memoryPanel();
+    loadMemoryStats();
+    var today = dayKeyOf(Date.now());
+    gameStats.plays = (gameStats.plays || 0) + 1;
+    if (gameStats.today !== today) { gameStats.today = today; gameStats.playsToday = 0; }
+    gameStats.playsToday = (gameStats.playsToday || 0) + 1;
+    if (result.grade === "win") gameStats.wins = (gameStats.wins || 0) + 1;
+    if (result.comboMax > (gameStats.comboMax || 0)) gameStats.comboMax = result.comboMax;
+    var memory = gameStats.memory;
+    memory.plays = (memory.plays || 0) + 1;
+    if (result.grade === "win") memory.wins = (memory.wins || 0) + 1;
+    if (result.grade === "win" && result.moves === core.MEMORY.PAIRS) memory.perfect = (memory.perfect || 0) + 1;
+    if (result.comboMax > (memory.comboMax || 0)) memory.comboMax = result.comboMax;
+    var rewardAllowed = core.gameRewardAllowed(gameStats, Date.now());
+    if (result.score > (memory.best || 0)) {
+      memory.best = result.score;
+      if (rewardAllowed) applyGrowth({ type: "high-score" }, Date.now(), 0);
+    }
+    saveGameStats();
+    var unlocks = core.evaluateGameAchievements(growth ? growth.achievements : [], gameStats)
+      .concat(core.evaluateMemoryAchievements(growth ? growth.achievements : [], memory));
+    var fresh = [];
+    for (var i = 0; i < unlocks.length; i += 1) {
+      if (fresh.indexOf(unlocks[i]) === -1 && growth && growth.achievements.indexOf(unlocks[i]) === -1) fresh.push(unlocks[i]);
+    }
+    if (fresh.length) {
+      growth.achievements = growth.achievements.concat(fresh);
+      saveGrowth();
+      announceUnlocks(fresh);
+    }
+    if (rewardAllowed) {
+      var out = applyGrowth({ type: core.gameReward(result.grade) }, Date.now(), 0);
+      if (out.leveledUp) onBondLevelUp();
+    }
+    showMood(result.grade === "win" ? "game-win" : (result.grade === "draw" ? "game-happy" : "game-lose"), 3400, true);
+    if (panel) memoryOverlay(panel, result, function () { openMemoryGame(); }, function () { closeMemoryGame(); });
+  }
+
   /* ---------- state plumbing ---------- */
 
   var growth = null;
@@ -1301,6 +1606,19 @@
   var keywordScanTimer = null;
   var lastChatCount = 0;
   var lastCodeCount = 0;
+
+  /* 读取数值型偏好：0 是合法值（例如心情/饱食度真的归零），不能用 `|| 默认值`
+     把 0 吞掉——导入存档时这个区别会被放大。 */
+  function readStoredNumber(key, fallback) {
+    try {
+      var raw = root.localStorage.getItem("whale-moe:" + key);
+      if (raw === null || raw === "") return fallback;
+      var n = Number(raw);
+      return Number.isFinite(n) ? n : fallback;
+    } catch (e) {
+      return fallback;
+    }
+  }
 
   function loadGrowth() {
     try {
@@ -1310,13 +1628,13 @@
         try { root.localStorage.setItem("whale-moe:companionSince", since); } catch (e) { /* ignore */ }
       }
       growth = {
-        mood: Number(root.localStorage.getItem("whale-moe:mood")) || core.DEFAULT_GROWTH.mood,
-        affinity: Number(root.localStorage.getItem("whale-moe:affinity")) || 0,
-        satiety: Number(root.localStorage.getItem("whale-moe:satiety")) || core.DEFAULT_GROWTH.satiety,
+        mood: readStoredNumber("mood", core.DEFAULT_GROWTH.mood),
+        affinity: readStoredNumber("affinity", 0),
+        satiety: readStoredNumber("satiety", core.DEFAULT_GROWTH.satiety),
         lastSignin: root.localStorage.getItem("whale-moe:lastSignin") || "",
-        signinStreak: Number(root.localStorage.getItem("whale-moe:signinStreak")) || 0,
+        signinStreak: readStoredNumber("signinStreak", 0),
         achievements: (root.localStorage.getItem("whale-moe:achievements") || "").split(",").filter(Boolean),
-        level: Number(root.localStorage.getItem("whale-moe:level")) || 1,
+        level: readStoredNumber("level", 1),
         companionSince: Number(since) || Date.now()
       };
     } catch (e) { growth = Object.assign({}, core.DEFAULT_GROWTH, { companionSince: Date.now() }); }
@@ -1336,7 +1654,7 @@
   function syncCompanionAchievements(now) {
     if (!growth || !growth.companionSince) return;
     var days = Math.max(0, Math.floor((now - growth.companionSince) / 86400000));
-    var tiers = [{ id: "day1", days: 1 }, { id: "day7", days: 7 }, { id: "day30", days: 30 }];
+    var tiers = [{ id: "day1", days: 1 }, { id: "day7", days: 7 }, { id: "day30", days: 30 }, { id: "day100", days: 100 }, { id: "day365", days: 365 }];
     var unlocks = tiers.filter(function (tier) { return days >= tier.days && growth.achievements.indexOf(tier.id) === -1; }).map(function (tier) { return tier.id; });
     if (unlocks.length) {
       growth.achievements = growth.achievements.concat(unlocks);
@@ -3204,6 +3522,7 @@
   root.__dshWhaleMoeIdleChat = idleChat;
   root.__dshWhaleMoeClaimQuest = claimQuestById;
   root.__dshWhaleMoeApplyBadge = applyBadge;
+  root.__dshWhaleMoeMemoryState = function () { return memoryState; };
 
   function onUserActivity() {
     memory.lastInteractionAt = Date.now();
@@ -3217,7 +3536,28 @@
     root.addEventListener("keydown", onUserActivity, true);
     root.addEventListener("resize", schedule);
     root.addEventListener("storage", schedule);
-    root.addEventListener("whale-moe-prefs-change", schedule);
+    root.addEventListener("whale-moe-prefs-change", function (event) {
+      var key = event && event.detail ? event.detail.key : "";
+      if (key === "save-import") {
+        /* 设置面板把存档写进 localStorage 后，表现层的内存副本必须重读，
+           否则要刷新页面才看得到新等级/成就。 */
+        loadGrowth();
+        loadGameStats();
+        loadUsageStats();
+        reconcile();
+        journalAdd("save", "导入了养成存档");
+        showLine("存档已导入，鲸鱼娘还记得你。");
+        return;
+      }
+      if (key === "growth-reset") {
+        loadGrowth();
+        loadGameStats();
+        loadUsageStats();
+        reconcile();
+        return;
+      }
+      schedule();
+    });
     root.addEventListener("visibilitychange", function () {
       if (doc.hidden) {
         if (gameOpen) { gamePausedFlag = true; gamePauseBadge(true, "hidden"); }
@@ -3323,6 +3663,7 @@
     else init();
   }
 
+  root.__dshWhaleMoeVersion = "2.5.0";
   root.__dshWhaleMoeDebug = { state: "boot", pose: null, line: "", view: "home" };
   start();
   schedulePreload();

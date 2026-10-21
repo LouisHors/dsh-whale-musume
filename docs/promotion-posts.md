@@ -32,14 +32,15 @@
 - 摸头加好感，戳肚子会不高兴，戳尾巴有专属反应（每个部位都有独立立绘和台词）；
 - 心情 / 好感 / 饱食 / 等级 / 连续签到 / 陪伴时长；
 - 每日任务 + 周签到，攒够羁绊等级会解锁新动作和称号；
-- 39 个成就 + 一面成就墙，设置里能看到「成长日记」（什么时候升级、什么时候拿成就）。
+- 45 个成就 + 一面成就墙，设置里能看到「成长日记」（什么时候升级、什么时候拿成就）；最近还加了「百日之约」「一年之约」。
 
 目前有 90+ 张立绘：待机、工作中、思考、离开、节日换装（圣诞 / 万圣 / 中秋 / 春节 / 情人节当天自动切）、天气三态（打伞 / 冷 / 雪天）、13 种梗表情（kyun、OMG、doge、膜拜、怀疑人生、waku waku…）。台词 530 多条，偏可爱向，也会玩点打工人 / 摸鱼 / DDL 的梗。
 
 还有些我觉得挺实用的小功能：
 - 天气陪伴：填个城市就有真实天气，还会下全屏的雨雪特效（工作忙时自动减弱）；
 - 主动关怀：久坐 25 分钟提醒、深夜还在忙会劝你休息、离开超过 3 分钟回来会打招呼 —— 都是「陪着，不是指挥」的语气，工作态绝不插嘴；
-- 小游戏：右键有个「戳泡泡·泡泡派对」，30 秒一局，摸鱼用；
+- 小游戏：右键有「戳泡泡」「接点心」「鲸鱼翻翻乐」三个，30 秒到 60 秒一局，摸鱼用；
+- 跨端迁移：换桌面端 / 换电脑时，设置里导出存档或复制迁移码，好感度和成就都能带走；
 - 无障碍模式（默认关）：可以 Tab 聚焦、回车摸头、方向键微调位置，状态会读屏播报。
 
 隐私上比较克制：所有数据只在本机（localStorage），无遥测、不上传、不访问外部网络；天气城市留空就是零联网；没有任何 API Key。卸载就干净移除，不改宿主任何文件。
@@ -71,7 +72,7 @@ https://github.com/Sutera-Diffusus/dsh-whale-musume
 ```
 最近把「鲸鱼娘」这个桌宠插件适配到了 DSH 桌面端（内嵌 0.2.0-rc.2），顺手把踩到的坑记下来，可能对其他插件作者有用。
 
-插件本身：一只待在右下角的看板娘，检测到工具运行会摆出对应的干活姿势；摸头养成、39 个成就、90+ 立绘、530+ 台词，本机运行无遥测。桌面端和旧版网页端都支持。
+插件本身：一只待在右下角的看板娘，检测到工具运行会摆出对应的干活姿势；摸头养成、45 个成就、90+ 立绘、530+ 台词、三个小游戏与跨端迁移，本机运行无遥测。桌面端和旧版网页端都支持。
 
 适配时踩到的坑（都修了）：
 1. 引导弹窗误判 —— 0.2.0-rc.2 刷新后常驻一个 role="dialog" 的引导弹窗，我原来用它判断「设置页」，结果首页被判成设置页，桌宠 display:none 永久隐藏。改成真正的面板根 [data-shortcut-modal="settings"]。
@@ -123,7 +124,7 @@ Show HN: Whale-girl desktop pet for DeepSeek Harness (desktop + web)
 I built a desktop-pet plugin for DeepSeek Harness: a whale-girl who idles in the corner,
 picks up a laptop when a tool call starts running, and never talks while you're working.
 
-Highlights: pat-to-raise growth, 90+ artworks, 39 achievements, optional weather companion,
+Highlights: pat-to-raise growth, 90+ artworks, 45 achievements, three mini-games, save migration, optional weather companion,
 optional MiMo TTS line playback, a built-in settings panel, and an accessibility mode.
 Local-first: no telemetry, no external requests (weather only if you set a city).
 

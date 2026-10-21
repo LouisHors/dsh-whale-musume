@@ -470,6 +470,171 @@
     };
   }
 
+  /* ================= mini game 3: memory match (pure, DOM-free) ================= */
+
+  var MEMORY = Object.freeze({
+    PAIRS: 8, GRID: 4, DURATION_MS: 60000, FLIP_BACK_MS: 900,
+    MATCH_SCORE: 100, MISMATCH_PENALTY: 10, COMBO_BONUS: 20, COMBO_CAP: 4,
+    WIN_PAIRS: 8, DRAW_PAIRS: 5, TIME_BONUS_PER_SECOND: 5
+  });
+
+  /* 翻牌面池：只列 assets/generated 里真实存在、且语义适合做「表情卡」的姿势。
+     表现层可以传入自己的候选池；核心只负责洗牌与取前 8 个。 */
+  var MEMORY_FACES = Object.freeze([
+    "daily-coffee", "daily-eat", "daily-stretch", "daily-pajama",
+    "daily-shower", "daily-cooking", "daily-fishing", "daily-gaming",
+    "daily-painting", "daily-picnic", "cool-shades", "meme-smug",
+    "meme-music", "meme-kyun", "meme-heart", "wink"
+  ]);
+
+  function shuffleList(list, rng) {
+    var out = list.slice();
+    var r = typeof rng === "function" ? rng : Math.random;
+    for (var i = out.length - 1; i > 0; i -= 1) {
+      var j = Math.floor(r() * (i + 1)) % (i + 1);
+      var tmp = out[i];
+      out[i] = out[j];
+      out[j] = tmp;
+    }
+    return out;
+  }
+
+  function memoryNewState(now, rng, faces) {
+    var t = typeof now === "number" && Number.isFinite(now) ? now : 0;
+    var pool = Array.isArray(faces) && faces.length >= MEMORY.PAIRS ? faces.slice() : MEMORY_FACES.slice();
+    var picked = shuffleList(pool, rng).slice(0, MEMORY.PAIRS);
+    var deck = shuffleList(picked.concat(picked), rng);
+    var cards = deck.map(function (face) {
+      return { face: face, matched: false, flipped: false };
+    });
+    return {
+      cards: cards, first: -1, second: -1, matched: 0, moves: 0, score: 0,
+      combo: 0, comboMax: 0, remainingMs: MEMORY.DURATION_MS, pendingHideAt: 0,
+      lastAt: t, status: "playing"
+    };
+  }
+
+  function memoryFlip(state, index, now) {
+    if (!state || state.status !== "playing") {
+      return { state: state, event: "ignored", index: index, matched: false, delta: 0, combo: 0 };
+    }
+    var t = typeof now === "number" && Number.isFinite(now) ? now : 0;
+    var dt = Math.max(0, t - (typeof state.lastAt === "number" ? state.lastAt : t));
+    var remainingMs = Math.max(0, state.remainingMs - dt);
+    if (remainingMs <= 0) {
+      return {
+        state: Object.assign({}, state, { remainingMs: 0, lastAt: t, status: "ended" }),
+        event: "timeout", index: index, matched: false, delta: 0, combo: state.combo
+      };
+    }
+    var i = typeof index === "number" ? Math.floor(index) : -1;
+    if (i < 0 || i >= state.cards.length) {
+      return { state: state, event: "ignored", index: i, matched: false, delta: 0, combo: state.combo };
+    }
+    /* 两张牌翻开后要等翻回动画结束，期间不允许再点，避免第三张把 first/second 冲掉。 */
+    if (state.pendingHideAt > 0) {
+      return { state: state, event: "ignored", index: i, matched: false, delta: 0, combo: state.combo };
+    }
+    var card = state.cards[i];
+    if (card.matched || card.flipped) {
+      return { state: state, event: "ignored", index: i, matched: false, delta: 0, combo: state.combo };
+    }
+    var cards = state.cards.map(function (c) {
+      return { face: c.face, matched: c.matched, flipped: c.flipped };
+    });
+    cards[i].flipped = true;
+    if (state.first < 0) {
+      return {
+        state: Object.assign({}, state, { cards: cards, first: i, lastAt: t, remainingMs: remainingMs }),
+        event: "first", index: i, face: card.face, matched: false, delta: 0, combo: state.combo
+      };
+    }
+    var first = state.first;
+    var second = i;
+    var moves = state.moves + 1;
+    if (cards[first].face === cards[second].face) {
+      cards[first].matched = true;
+      cards[second].matched = true;
+      var combo = state.combo + 1;
+      var bonus = Math.min(combo, MEMORY.COMBO_CAP) * MEMORY.COMBO_BONUS;
+      var delta = MEMORY.MATCH_SCORE + bonus;
+      var matched = state.matched + 1;
+      var status = matched >= MEMORY.WIN_PAIRS ? "ended" : "playing";
+      return {
+        state: Object.assign({}, state, {
+          cards: cards, first: -1, second: -1, matched: matched, moves: moves,
+          score: state.score + delta, combo: combo,
+          comboMax: Math.max(state.comboMax, combo), status: status, lastAt: t,
+          remainingMs: remainingMs
+        }),
+        event: status === "ended" ? "win" : "match",
+        index: i, face: card.face, matched: true, delta: delta, combo: combo
+      };
+    }
+    return {
+      state: Object.assign({}, state, {
+        cards: cards, second: second, moves: moves,
+        score: Math.max(0, state.score - MEMORY.MISMATCH_PENALTY),
+        combo: 0, pendingHideAt: t + MEMORY.FLIP_BACK_MS, lastAt: t,
+        remainingMs: remainingMs
+      }),
+      event: "mismatch", index: i, face: card.face, matched: false,
+      delta: -MEMORY.MISMATCH_PENALTY, combo: 0
+    };
+  }
+
+  function memoryTick(state, now) {
+    if (!state || state.status !== "playing") return { state: state, events: [] };
+    var t = typeof now === "number" && Number.isFinite(now) ? now : 0;
+    var dt = Math.max(0, t - (typeof state.lastAt === "number" ? state.lastAt : t));
+    var events = [];
+    var patch = {
+      remainingMs: Math.max(0, state.remainingMs - dt),
+      lastAt: t
+    };
+    if (state.pendingHideAt > 0 && t >= state.pendingHideAt) {
+      patch.cards = state.cards.map(function (c) {
+        return c.matched ? { face: c.face, matched: true, flipped: false } : { face: c.face, matched: false, flipped: false };
+      });
+      patch.first = -1;
+      patch.second = -1;
+      patch.pendingHideAt = 0;
+      events.push({ kind: "hide" });
+    }
+    if (patch.remainingMs <= 0) {
+      patch.status = "ended";
+      events.push({ kind: "timeout" });
+    }
+    var changed = events.length > 0 || patch.remainingMs !== state.remainingMs;
+    if (!changed) return { state: state, events: events };
+    return { state: Object.assign({}, state, patch), events: events };
+  }
+
+  function memoryResult(state) {
+    var matched = state ? state.matched | 0 : 0;
+    var moves = state ? state.moves | 0 : 0;
+    var remainingMs = state ? Math.max(0, state.remainingMs | 0) : 0;
+    var grade = matched >= MEMORY.WIN_PAIRS ? "win" : (matched >= MEMORY.DRAW_PAIRS ? "draw" : "lose");
+    var base = state ? state.score | 0 : 0;
+    var timeBonus = grade === "win" ? Math.ceil(remainingMs / 1000) * MEMORY.TIME_BONUS_PER_SECOND : 0;
+    return {
+      score: base + timeBonus, grade: grade, matched: matched, moves: moves,
+      comboMax: state ? state.comboMax | 0 : 0, remainingMs: remainingMs,
+      accuracy: moves > 0 ? Math.round((matched / moves) * 100) : 0
+    };
+  }
+
+  function evaluateMemoryAchievements(have, memoryStats) {
+    var out = [];
+    var has = have && have.length ? have : [];
+    var s = memoryStats || {};
+    if ((s.plays | 0) >= 1 && has.indexOf("memory-first") === -1) out.push("memory-first");
+    if ((s.wins | 0) >= 1 && has.indexOf("memory-clear") === -1) out.push("memory-clear");
+    if ((s.perfect | 0) >= 1 && has.indexOf("memory-perfect") === -1) out.push("memory-perfect");
+    if ((s.comboMax | 0) >= 6 && has.indexOf("memory-combo6") === -1) out.push("memory-combo6");
+    return out;
+  }
+
   /* ================= growth / keywords / dialogue ================= */
 
   var GROWTH = Object.freeze({
@@ -499,6 +664,8 @@
     { id: "day1", icon: "💞", name: "一日之缘", desc: "鲸鱼娘陪伴满 1 天" },
     { id: "day7", icon: "💎", name: "一周相伴", desc: "鲸鱼娘陪伴满 7 天" },
     { id: "day30", icon: "🏛️", name: "三十日契约", desc: "鲸鱼娘陪伴满 30 天" },
+    { id: "day100", icon: "💯", name: "百日之约", desc: "鲸鱼娘陪伴满 100 天" },
+    { id: "day365", icon: "🌏", name: "一年之约", desc: "鲸鱼娘陪伴满 365 天" },
     { id: "first-tool", icon: "🛠️", name: "开工啦", desc: "第一次看到工具运行" },
     { id: "tools-10", icon: "🔧", name: "工具十连", desc: "累计看到 10 次工具运行" },
     { id: "tools-50", icon: "🏭", name: "工具五十连", desc: "累计看到 50 次工具运行" },
@@ -518,6 +685,10 @@
     { id: "game-win", icon: "👑", name: "泡泡之王", desc: "单局戳泡泡得分达到 300" },
     { id: "game-combo10", icon: "🔥", name: "连击达人", desc: "单局最高连击达到 10" },
     { id: "game-highscore", icon: "🏆", name: "纪录刷新", desc: "打破一次历史最高分" },
+    { id: "memory-first", icon: "🃏", name: "翻牌初体验", desc: "第一次玩鲸鱼翻翻乐" },
+    { id: "memory-clear", icon: "🧠", name: "全记住了", desc: "通关一次鲸鱼翻翻乐" },
+    { id: "memory-perfect", icon: "🎯", name: "一次不翻错", desc: "零失误通关鲸鱼翻翻乐" },
+    { id: "memory-combo6", icon: "🔗", name: "记忆连击", desc: "翻翻乐连续配对 6 次" },
     { id: "quest-first", icon: "🎯", name: "任务初体验", desc: "完成第一个每日任务" },
     { id: "quest-all", icon: "🎟️", name: "一日全勤", desc: "单日 3 个每日任务全部领取" },
     { id: "week-signin7", icon: "🏆", name: "周常满勤", desc: "本周签到板集满 7 格" },
@@ -600,6 +771,332 @@
     if (streak >= 3 && have.indexOf("signin3") === -1) out.push("signin3");
     if (streak >= 7 && have.indexOf("signin7") === -1) out.push("signin7");
     return out;
+  }
+
+  /* ================= portable save data (pure, DOM-free) =================
+     导出/导入只处理「养成数据」这一层：数值、成就、任务、统计、日记与称呼。
+     设备相关的位置（floatX/floatY）、天气经纬度与一次性标记不迁移，避免把
+     另一台机器的屏幕坐标/隐私数据带过来。 */
+
+  var PORTABLE = Object.freeze({
+    SCHEMA: "dsh-whale-musume/save",
+    VERSION: 1,
+    MAX_TEXT: 200000,
+    MAX_JSON: 65536,
+    KEYS: Object.freeze([
+      "mood", "affinity", "satiety", "lastSignin", "signinStreak", "achievements",
+      "companionSince", "level", "quests", "weekSignin", "badge",
+      "gameStats", "usageStats", "journal", "title", "selfName"
+    ]),
+    CORE_KEYS: Object.freeze([
+      "mood", "affinity", "satiety", "lastSignin", "signinStreak", "achievements",
+      "companionSince", "level", "journal", "badge", "title", "selfName"
+    ])
+  });
+
+  function portableNumber(value, min, max, fallback) {
+    var n = Number(value);
+    if (!Number.isFinite(n)) return fallback;
+    return Math.max(min, Math.min(max, Math.round(n)));
+  }
+
+  function portableText(value, maxLength) {
+    if (typeof value !== "string") return "";
+    var text = value.replace(/[\u0000-\u001f\u007f]/g, "").trim();
+    return text.slice(0, maxLength);
+  }
+
+  function portableAchievements(value) {
+    if (typeof value !== "string" || value.length === 0) return "";
+    var known = {};
+    for (var i = 0; i < ACHIEVEMENTS.length; i += 1) known[ACHIEVEMENTS[i].id] = true;
+    var seen = {};
+    var out = [];
+    var parts = value.split(",");
+    for (var j = 0; j < parts.length && out.length < 120; j += 1) {
+      var id = parts[j].trim();
+      if (!known[id] || seen[id]) continue;
+      seen[id] = true;
+      out.push(id);
+    }
+    return out.join(",");
+  }
+
+  function portableJson(value, validate) {
+    if (typeof value !== "string" || value.length === 0 || value.length > PORTABLE.MAX_JSON) return null;
+    try {
+      var parsed = JSON.parse(value);
+      if (!validate(parsed)) return null;
+      var next = JSON.stringify(parsed);
+      return next.length <= PORTABLE.MAX_JSON ? next : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function portableIsObject(value) {
+    return !!value && typeof value === "object" && !Array.isArray(value);
+  }
+
+  function portableSanitizeData(raw, now) {
+    var src = portableIsObject(raw) ? raw : {};
+    var t = typeof now === "number" && Number.isFinite(now) ? now : Date.now();
+    var out = {};
+    var numeric = {
+      mood: [0, 100], affinity: [0, 10000], satiety: [0, 100],
+      signinStreak: [0, 10000], level: [1, 999]
+    };
+    for (var key in numeric) {
+      if (Object.prototype.hasOwnProperty.call(src, key)) {
+        out[key] = String(portableNumber(src[key], numeric[key][0], numeric[key][1], numeric[key][0]));
+      }
+    }
+    if (typeof src.lastSignin === "string") {
+      out.lastSignin = /^\d{4}-\d{1,2}-\d{1,2}$/.test(src.lastSignin) ? src.lastSignin : "";
+    }
+    if (Object.prototype.hasOwnProperty.call(src, "achievements")) {
+      out.achievements = portableAchievements(src.achievements);
+    }
+    if (Object.prototype.hasOwnProperty.call(src, "companionSince")) {
+      var since = Number(src.companionSince);
+      out.companionSince = Number.isFinite(since) && since > 0 && since <= t + 86400000 ? String(Math.round(since)) : "";
+    }
+    if (Object.prototype.hasOwnProperty.call(src, "badge")) {
+      out.badge = /^[a-z0-9-]{0,40}$/.test(String(src.badge || "")) ? String(src.badge || "") : "";
+    }
+    if (Object.prototype.hasOwnProperty.call(src, "title")) out.title = portableText(src.title, 20);
+    if (Object.prototype.hasOwnProperty.call(src, "selfName")) out.selfName = portableText(src.selfName, 20);
+    if (Object.prototype.hasOwnProperty.call(src, "quests")) {
+      var quests = portableJson(src.quests, function (o) {
+        return portableIsObject(o) && Array.isArray(o.slots) && o.slots.length <= 3;
+      });
+      if (quests !== null) out.quests = quests;
+    }
+    if (Object.prototype.hasOwnProperty.call(src, "weekSignin")) {
+      var week = portableJson(src.weekSignin, portableIsObject);
+      if (week !== null) out.weekSignin = week;
+    }
+    if (Object.prototype.hasOwnProperty.call(src, "gameStats")) {
+      var game = portableJson(src.gameStats, portableIsObject);
+      if (game !== null) out.gameStats = game;
+    }
+    if (Object.prototype.hasOwnProperty.call(src, "usageStats")) {
+      var usage = portableJson(src.usageStats, function (o) {
+        return portableIsObject(o) && (o.tools === undefined || typeof o.tools === "number");
+      });
+      if (usage !== null) out.usageStats = usage;
+    }
+    if (Object.prototype.hasOwnProperty.call(src, "journal")) {
+      var journal = portableJson(src.journal, function (o) { return Array.isArray(o) && o.length <= 80; });
+      if (journal !== null) out.journal = journal;
+    }
+    return out;
+  }
+
+  function portableBuild(raw, meta, now) {
+    var t = typeof now === "number" && Number.isFinite(now) ? now : Date.now();
+    var info = portableIsObject(meta) ? meta : {};
+    return {
+      schema: PORTABLE.SCHEMA,
+      version: PORTABLE.VERSION,
+      exportedAt: new Date(t).toISOString(),
+      appVersion: portableText(info.appVersion, 32),
+      data: portableSanitizeData(raw, t)
+    };
+  }
+
+  function portableSummary(payload, now) {
+    var data = payload && portableIsObject(payload.data) ? payload.data : {};
+    var t = typeof now === "number" && Number.isFinite(now) ? now : Date.now();
+    var days = 0;
+    var since = Number(data.companionSince);
+    if (Number.isFinite(since) && since > 0) days = Math.max(0, Math.floor((t - since) / 86400000));
+    return {
+      mood: Number(data.mood) || 0,
+      affinity: Number(data.affinity) || 0,
+      level: Number(data.level) || 1,
+      achievements: typeof data.achievements === "string" && data.achievements ? data.achievements.split(",").length : 0,
+      companionDays: days,
+      journal: 0,
+      exportedAt: payload && payload.exportedAt ? payload.exportedAt : ""
+    };
+  }
+
+  function portableParse(text, now) {
+    if (typeof text !== "string" || text.trim().length === 0) {
+      return { ok: false, error: "内容是空的" };
+    }
+    if (text.length > PORTABLE.MAX_TEXT) {
+      return { ok: false, error: "内容太大，不像是存档" };
+    }
+    var parsed;
+    try {
+      parsed = JSON.parse(text);
+    } catch (e) {
+      return { ok: false, error: "不是合法的 JSON" };
+    }
+    if (!portableIsObject(parsed) || parsed.schema !== PORTABLE.SCHEMA) {
+      return { ok: false, error: "这不是鲸鱼娘的存档文件" };
+    }
+    var version = Number(parsed.version);
+    if (!Number.isFinite(version) || version < 1 || version > PORTABLE.VERSION) {
+      return { ok: false, error: "存档版本不兼容（当前支持 v" + PORTABLE.VERSION + "）" };
+    }
+    if (!portableIsObject(parsed.data)) {
+      return { ok: false, error: "存档里没有可用的数据" };
+    }
+    var t = typeof now === "number" && Number.isFinite(now) ? now : Date.now();
+    var data = portableSanitizeData(parsed.data, t);
+    if (Object.keys(data).length === 0) {
+      return { ok: false, error: "存档里没有可识别的养成数据" };
+    }
+    var payload = {
+      schema: PORTABLE.SCHEMA,
+      version: PORTABLE.VERSION,
+      exportedAt: typeof parsed.exportedAt === "string" ? parsed.exportedAt.slice(0, 40) : "",
+      appVersion: portableText(parsed.appVersion, 32),
+      data: data
+    };
+    var summary = portableSummary(payload, t);
+    var journal = 0;
+    if (typeof data.journal === "string") {
+      try { journal = JSON.parse(data.journal).length; } catch (e) { journal = 0; }
+    }
+    summary.journal = journal;
+    return { ok: true, payload: payload, summary: summary };
+  }
+
+  function portableCore(payload) {
+    var data = payload && portableIsObject(payload.data) ? payload.data : {};
+    var core = {};
+    for (var i = 0; i < PORTABLE.CORE_KEYS.length; i += 1) {
+      var key = PORTABLE.CORE_KEYS[i];
+      if (typeof data[key] === "string") core[key] = data[key];
+    }
+    return {
+      schema: PORTABLE.SCHEMA, version: PORTABLE.VERSION,
+      exportedAt: payload && payload.exportedAt ? payload.exportedAt : "",
+      appVersion: payload && payload.appVersion ? payload.appVersion : "",
+      data: core
+    };
+  }
+
+  /* 迁移码：WM1-<8 位校验>-<base64url>。校验和只防手滑/截断，不防篡改。 */
+  function portableChecksum(text) {
+    var hash = 0x811c9dc5;
+    for (var i = 0; i < text.length; i += 1) {
+      hash ^= text.charCodeAt(i);
+      hash = Math.imul(hash, 0x01000193) >>> 0;
+    }
+    return ("0000000" + hash.toString(16)).slice(-8);
+  }
+
+  /* 纯 JS base64/UTF-8：不依赖 Buffer / btoa / atob。
+     插件会被注入到桌面端、Web 与测试沙箱三种环境，少一个全局依赖就少一类
+     「本机能跑、宿主里报错」的问题。 */
+  var PORTABLE_B64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+  function portableUtf8Bytes(text) {
+    var bytes = [];
+    for (var i = 0; i < text.length; i += 1) {
+      var code = text.charCodeAt(i);
+      if (code < 0x80) {
+        bytes.push(code);
+      } else if (code < 0x800) {
+        bytes.push(0xc0 | (code >> 6), 0x80 | (code & 0x3f));
+      } else if (code >= 0xd800 && code <= 0xdbff && i + 1 < text.length) {
+        var next = text.charCodeAt(i + 1);
+        if (next >= 0xdc00 && next <= 0xdfff) {
+          var cp = 0x10000 + ((code - 0xd800) << 10) + (next - 0xdc00);
+          bytes.push(0xf0 | (cp >> 18), 0x80 | ((cp >> 12) & 0x3f), 0x80 | ((cp >> 6) & 0x3f), 0x80 | (cp & 0x3f));
+          i += 1;
+        } else {
+          bytes.push(0xe0 | (code >> 12), 0x80 | ((code >> 6) & 0x3f), 0x80 | (code & 0x3f));
+        }
+      } else {
+        bytes.push(0xe0 | (code >> 12), 0x80 | ((code >> 6) & 0x3f), 0x80 | (code & 0x3f));
+      }
+    }
+    return bytes;
+  }
+
+  function portableUtf8Text(bytes) {
+    var out = "";
+    for (var i = 0; i < bytes.length;) {
+      var b = bytes[i] & 0xff;
+      i += 1;
+      var cp;
+      if (b < 0x80) cp = b;
+      else if ((b & 0xe0) === 0xc0) { cp = ((b & 0x1f) << 6) | (bytes[i] & 0x3f); i += 1; }
+      else if ((b & 0xf0) === 0xe0) { cp = ((b & 0x0f) << 12) | ((bytes[i] & 0x3f) << 6) | (bytes[i + 1] & 0x3f); i += 2; }
+      else if ((b & 0xf8) === 0xf0) { cp = ((b & 0x07) << 18) | ((bytes[i] & 0x3f) << 12) | ((bytes[i + 1] & 0x3f) << 6) | (bytes[i + 2] & 0x3f); i += 3; }
+      else cp = 0xfffd;
+      if (cp > 0xffff) {
+        cp -= 0x10000;
+        out += String.fromCharCode(0xd800 + (cp >> 10), 0xdc00 + (cp & 0x3ff));
+      } else {
+        out += String.fromCharCode(cp);
+      }
+    }
+    return out;
+  }
+
+  function portableBase64Encode(text) {
+    var bytes = portableUtf8Bytes(text);
+    var out = "";
+    for (var i = 0; i < bytes.length; i += 3) {
+      var b0 = bytes[i];
+      var b1 = i + 1 < bytes.length ? bytes[i + 1] : 0;
+      var b2 = i + 2 < bytes.length ? bytes[i + 2] : 0;
+      out += PORTABLE_B64.charAt(b0 >> 2);
+      out += PORTABLE_B64.charAt(((b0 & 3) << 4) | (b1 >> 4));
+      out += i + 1 < bytes.length ? PORTABLE_B64.charAt(((b1 & 15) << 2) | (b2 >> 6)) : "=";
+      out += i + 2 < bytes.length ? PORTABLE_B64.charAt(b2 & 63) : "=";
+    }
+    return out;
+  }
+
+  function portableBase64Decode(text) {
+    var clean = String(text).replace(/[^A-Za-z0-9+/]/g, "");
+    var bytes = [];
+    for (var i = 0; i < clean.length; i += 4) {
+      var c0 = PORTABLE_B64.indexOf(clean.charAt(i));
+      var c1 = PORTABLE_B64.indexOf(clean.charAt(i + 1));
+      if (c0 < 0 || c1 < 0) break;
+      bytes.push((c0 << 2) | (c1 >> 4));
+      var c2 = i + 2 < clean.length ? PORTABLE_B64.indexOf(clean.charAt(i + 2)) : -1;
+      var c3 = i + 3 < clean.length ? PORTABLE_B64.indexOf(clean.charAt(i + 3)) : -1;
+      if (c2 >= 0) bytes.push(((c1 & 15) << 4) | (c2 >> 2));
+      if (c2 >= 0 && c3 >= 0) bytes.push(((c2 & 3) << 6) | c3);
+    }
+    return portableUtf8Text(bytes);
+  }
+
+  function portableCode(payload) {
+    var json = JSON.stringify(portableCore(payload));
+    var encoded = portableBase64Encode(json).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+    return "WM1-" + portableChecksum(json) + "-" + encoded;
+  }
+
+  function portableFromCode(text, now) {
+    if (typeof text !== "string") return { ok: false, error: "迁移码是空的" };
+    var code = text.replace(/\s+/g, "");
+    if (code.length === 0) return { ok: false, error: "迁移码是空的" };
+    if (code.length > PORTABLE.MAX_TEXT) return { ok: false, error: "迁移码太长，不像是有效的存档" };
+    var match = /^WM1-([0-9a-f]{8})-([A-Za-z0-9_-]+)$/.exec(code);
+    if (!match) return { ok: false, error: "迁移码格式不对（应以 WM1- 开头）" };
+    var json;
+    try {
+      var base64 = match[2].replace(/-/g, "+").replace(/_/g, "/");
+      while (base64.length % 4 !== 0) base64 += "=";
+      json = portableBase64Decode(base64);
+    } catch (e) {
+      return { ok: false, error: "迁移码解码失败" };
+    }
+    if (portableChecksum(json) !== match[1]) {
+      return { ok: false, error: "迁移码校验失败，可能复制时少了一段" };
+    }
+    return portableParse(json, now);
   }
 
   /* ================= daily quests / weekly signin / bond ================= */
@@ -1915,6 +2412,20 @@
     catchTick: catchTick,
     catchMove: catchMove,
     catchResult: catchResult,
+    MEMORY: MEMORY,
+    MEMORY_FACES: MEMORY_FACES,
+    memoryNewState: memoryNewState,
+    memoryFlip: memoryFlip,
+    memoryTick: memoryTick,
+    memoryResult: memoryResult,
+    evaluateMemoryAchievements: evaluateMemoryAchievements,
+    PORTABLE: PORTABLE,
+    portableBuild: portableBuild,
+    portableParse: portableParse,
+    portableSummary: portableSummary,
+    portableCore: portableCore,
+    portableCode: portableCode,
+    portableFromCode: portableFromCode,
     QUEST_POOL: QUEST_POOL,
     BOND: BOND,
     refreshQuests: refreshQuests,
