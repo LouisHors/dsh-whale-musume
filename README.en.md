@@ -42,6 +42,7 @@ And she actually knows what you are doing: instead of switching artwork on a tim
 
 - [Quick start](#quick-start)
 - [Screenshots](#screenshots)
+- [Who she is for](#who-she-is-for)
 - [Features](#features)
 - [Compatibility](#compatibility)
 - [First run](#first-run)
@@ -122,6 +123,15 @@ If all four look right, you are done. Otherwise see [Troubleshooting](#troublesh
 </div>
 
 More: [interaction board](docs/images/actions-board.png) · [new artwork board](docs/images/new-poses-board.png) · posters [v1](docs/images/promo-poster-v1.png) / [v2](docs/images/promo-poster-v2.png) / [v3](docs/images/promo-poster-v3.png) / [v4](docs/images/promo-poster-v4.png)
+
+---
+
+## Who she is for
+
+- You want a companion with **progress to build**, not just an animated widget: daily quests, weekly check-ins, 45 achievements, three mini-games and a growth journal.
+- You move between the **DSH desktop app and legacy web**, or between machines — she can export and import her save.
+- You care about **local-first**: data stays in the host localStorage, no telemetry, clean uninstall; 203 tests cover the core logic and UI wiring.
+- If you only want Live2D-grade animation or a standalone transparent desktop window, there are more specialised projects; the whale girl focuses on the companionship system.
 
 ---
 

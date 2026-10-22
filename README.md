@@ -42,6 +42,7 @@
 
 - [一分钟上手](#一分钟上手)
 - [看看她长什么样](#看看她长什么样)
+- [她适合谁](#她适合谁)
 - [她有什么](#她有什么)
 - [兼容性](#兼容性)
 - [第一次使用](#第一次使用)
@@ -122,6 +123,15 @@ window.__dshWhaleMoeDebug                                      // state 非 "hid
 </div>
 
 更多素材：[交互动作总览](docs/images/actions-board.png) · [新增立绘总览](docs/images/new-poses-board.png) · [宣传海报 v1](docs/images/promo-poster-v1.png) / [v2](docs/images/promo-poster-v2.png) / [v3](docs/images/promo-poster-v3.png) / [v4](docs/images/promo-poster-v4.png)
+
+---
+
+## 她适合谁
+
+- 你想要的不只是「会动的挂件」，而是一个**有进度可攒**的桌宠：每日任务、周签到、45 个成就、三个小游戏、成长日记。
+- 你同时用 **DSH 桌面端和旧版 Web**，或者经常换机器——她有跨端存档导出/导入。
+- 你在意**本地优先**：数据只在宿主 localStorage，无遥测，卸载即走；203 项测试覆盖核心逻辑与交互接线。
+- 如果你只想要 Live2D 级动画或独立桌面透明窗，同类里有更专精的项目；鲸鱼娘的重点是「陪伴系统」。
 
 ---
 
@@ -528,6 +538,7 @@ dsh-whale-musume/
 │  ├─ desktop-0.2.1-rc.2-contract.md    # 0.2.1-rc.2 契约差分（静态，未跑 Electron）
 │  ├─ desktop-0.2.1-rc.2-deploy.md      # 0.2.1 相对 0.2.0 手册的部署差分
 │  ├─ release-notes-v2.5.0.md           # v2.5.0 Release 说明
+│  ├─ npm-publish.md                    # npm 发布/回滚手册
 │  ├─ release-notes-v2.4.0.md           # v2.4.0 Release 说明
 │  └─ images/                       # logo、运行截图与立绘总览
 ├─ .github/
