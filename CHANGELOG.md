@@ -17,6 +17,7 @@
 - 迁移码的 base64 / UTF-8 改为纯 JS 实现，不依赖 `Buffer` / `btoa` / `atob`：同一份 core 在桌面端、旧版 Web 与测试沙箱三种环境都能解码中文。
 - 迁移存档做了逐字段校验：数值钳制、成就白名单去重、JSON 字段结构检查与 64KB 上限；坏码/未来版本/非本插件 JSON 都会明确报错，**不会改动现有存档**。
 - 翻翻乐的纯逻辑全部下沉 core（发牌 / 翻牌 / 翻回计时 / 结算），表现层只做面板与事件；新增零浏览器 UI 验收，用 DOM 桩真执行注入的 core + presenter。
+- **npm 发布**：2026-10-22 发布 `dsh-whale-musume@2.5.0`（latest）；安装不再依赖 GitHub/git，`dsh plugin add dsh-whale-musume` 即可。包体 12.9 MB / 103 文件，发布前跑完整测试，带 provenance。
 
 ### 测试
 

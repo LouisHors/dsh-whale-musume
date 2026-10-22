@@ -1,5 +1,7 @@
 # npm 发布手册（v2.5.0 起）
 
+> **状态：2026-10-22 已发布 `dsh-whale-musume@2.5.0`（latest）**。安装：`dsh plugin add dsh-whale-musume`。下面的登录/Token 流程保留给后续版本。
+>
 > 目的：把 `dsh-whale-musume` 从「只能 git 安装」变成「npm 一行安装」。
 > 这能同时解决三件事：install 时的 `git ls-remote` 失败（#21 / #29）、插件市场的下载排序、以及 dsh 0.2.1+ 的 Discover / `plugin_market` 对 npm 包的索引。
 
@@ -27,12 +29,17 @@ npm whoami --registry=https://registry.npmjs.org   # 应输出你的 npm 用户�
 npm run publish:npm
 ```
 
+> 如果报 `403 ... Two-factor authentication or granular access token with bypass 2fa enabled is required to publish packages`：
+> - **本机临时发**：在命令后加 `--otp=<当前 6 位验证码>`，例如 `npm publish --access public --registry=https://registry.npmjs.org --otp=123456`；
+> - **CI / 长期自动**：创建 Granular Token 时勾选 **Bypass 2FA**（或使用 classic 的 Automation token），再填到 GitHub secret `NPM_TOKEN`。网页登录拿到的 token 不带 bypass，`npm publish` 仍会被 403 拦下。
+
 ### B. GitHub Actions 自动发布（推荐长期）
 
 1. 在 npmjs.com → Access Tokens 创建 **Granular Token**：
    - Permissions: **Read and write**
    - Packages: 选择 `dsh-whale-musume`（包还不存在时选 All packages，或先手动发一次再收紧）
-   - 建议开启 2FA / 设置过期时间
+   - **Bypass 2FA：勾选**（否则 CI 发布会被 403；或改用 classic Automation token）
+   - 建议设置过期时间
 2. 打开 GitHub 仓库 **Settings → Secrets and variables → Actions → New repository secret**
    - Name: `NPM_TOKEN`
    - Value: 上一步的 token（不要贴到聊天或提交到仓库）

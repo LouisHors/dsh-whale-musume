@@ -51,16 +51,24 @@ v2.4.0 只是把安装门禁和 DSH `0.2.1-rc.2` 对齐，没有新功能。这�
 
 ## 升级
 
+优先从 npm 装（v2.5.0 起已发布，安装不再依赖 git 预检）：
+
 ```powershell
 # 桌面端：先 remove 再 add（add 不覆盖已安装版本）
 $env:ELECTRON_RUN_AS_NODE = "1"
 & "$Desktop\DeepSeek Harness.exe" --expose-internals $Cli plugin --profile desktop remove dsh-whale-musume
+& "$Desktop\DeepSeek Harness.exe" --expose-internals $Cli plugin --profile desktop add dsh-whale-musume
+```
+
+也可以继续用 GitHub 源（想跟 `main` 最新提交时）：
+
+```powershell
 & "$Desktop\DeepSeek Harness.exe" --expose-internals $Cli plugin --profile desktop add github:Sutera-Diffusus/dsh-whale-musume
 ```
 
 装完**重启桌面端应用**（不是刷新页面）。养成数据仍在宿主 origin 的 `localStorage` 里，重装不丢；要换端就用「跨端迁移」。
 
-也可以直接用本页资产 `dsh-whale-musume-plugin-v2.5.0.zip` 按本地路径安装。
+npm 包页：<https://www.npmjs.com/package/dsh-whale-musume>。也可以直接用本页资产 `dsh-whale-musume-plugin-v2.5.0.zip` 按本地路径安装。
 
 ## 兼容性
 
@@ -79,6 +87,8 @@ v2.5.0 adds two features on top of the v2.4.0 compatibility release:
 - **Whale Memory**, a third mini-game: 4×4 / 8 pairs / 60 seconds, reusing 16 existing artworks. Match +100, combo bonuses up to +80, mismatch −10 and breaks the combo, clear bonus 5 × seconds left. Mouse and keyboard (arrows / Enter / Escape). Mutually exclusive with the other two games; shares the three daily reward-bearing rounds.
 - **Cross-device migration** in Settings → Mascot: export a JSON save, copy a `WM1-…` migration code (core progress only), or import either. It carries mood / affection / satiety / level / sign-in / achievements / quests / game records / journal / names, and deliberately excludes the floating position and weather coordinates. Import reloads the mascot in place (no page refresh); a bad or truncated code fails with a specific error and leaves the existing save untouched.
 - Six new achievements (four memory, plus 100-day and 365-day companionship), 45 total.
+
+The package is also published on npm as **`dsh-whale-musume@2.5.0`** — `dsh plugin add dsh-whale-musume` no longer needs a git preflight. The GitHub source install remains available for following `main`.
 
 `npm test`: **203/203**. No live Electron or browser visual acceptance was performed in this release; the panel follows the existing game-panel tokens and structure, but the final look should be eyeballed once.
 

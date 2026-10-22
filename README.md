@@ -64,22 +64,30 @@
 
 ## 一分钟上手
 
+**最简：从 npm 装**（不需要 `git ls-remote` 预检，网络受限时更稳）：
+
 ```powershell
 # 桌面端（Electron 壳）——把路径换成你的安装位置
 $Desktop = "D:\DeepseekHarnessDesktop"
 $Cli = "$Desktop\resources\app.asar\dsh\node_modules\@deepseek-ai\dsh-desktop-host\lib\cli.js"
 $env:ELECTRON_RUN_AS_NODE = "1"
-& "$Desktop\DeepSeek Harness.exe" --expose-internals $Cli plugin --profile desktop add github:Sutera-Diffusus/dsh-whale-musume
+& "$Desktop\DeepSeek Harness.exe" --expose-internals $Cli plugin --profile desktop add dsh-whale-musume
 ```
 
 ```powershell
 # 旧版 Web profile
+dsh plugin --profile web add dsh-whale-musume
+```
+
+也可以继续从 GitHub 源装（等价；想跟 `main` 最新提交时用这个）：
+
+```powershell
 dsh plugin --profile web add github:Sutera-Diffusus/dsh-whale-musume
 ```
 
 装完**重启宿主**（桌面端重启应用；旧版 Web 重启 `dsh web` 后 `Ctrl+F5`），她就出现在右下角了。
 
-> 从插件市场或 `dsh plugin add` 装不上时，见[安装失败排查](#安装失败排查从插件市场--dsh-plugin-add-装不上)。日志被截成只剩 `[exit 1]`、没发到 npm 所以回落 git、还有 `allowBuilds` 提示，那一节都写了。
+> 从插件市场或 `dsh plugin add` 装不上时，见[安装失败排查](#安装失败排查从插件市场--dsh-plugin-add-装不上)。日志被截成只剩 `[exit 1]`、走 git 源时的 `git ls-remote` 超时、还有 `allowBuilds` 提示，那一节都写了。
 
 <details>
 <summary>装完怎么确认她真的进来了？</summary>
@@ -428,7 +436,7 @@ node scripts/apply-theme.mjs --rollback "<backup dir>"
 
 ### 安装失败排查（从插件市场 / `dsh plugin add` 装不上）
 
-先说结论：鲸鱼娘是**纯前端插件包**——`package.json` 没有 `prepare`、没有任何 `dependencies`、产物随仓库提交，**安装过程不需要任何构建**。所以安装失败几乎总是卡在 git 安装这条路径的两个外部条件上（**GitHub 连不连得上**、**profile 的 registry 解不解析得出**），与插件代码无关。另外，本插件**没有发布到 npm**，插件市场搜包一定搜不到、每次都会回落 git 安装，这是预期行为而不是故障。
+先说结论：鲸鱼娘是**纯前端插件包**——`package.json` 没有 `prepare`、没有任何 `dependencies`、产物随仓库提交，**安装过程不需要任何构建**。所以安装失败几乎总是卡在「GitHub 连不连得上」或「profile 的 registry 解不解析得出」这两个外部条件上，与插件代码无关。**v2.5.0 起已发布 npm**（包名 `dsh-whale-musume`），优先用 npm 安装；只有从 GitHub 源安装时才会走 git 预检。
 
 | 日志里的关键行 | 属于 | 处理 |
 |---|---|---|
@@ -495,7 +503,7 @@ Test-Path "$DshHome\profiles\desktop\node_modules\dsh-whale-musume\lib\client.js
 **已知限制**（不是待办，是当前边界）：
 
 - 桌面端目前只在 Windows 10 / 11 验证；macOS / Linux 桌面端未验证
-- 未发布到 npm（安装走 GitHub 源）：`dsh plugin add github:Sutera-Diffusus/dsh-whale-musume`
+- npm 包已发布：`dsh plugin add dsh-whale-musume`；GitHub 源安装仍保留（`dsh plugin add github:Sutera-Diffusus/dsh-whale-musume`）
 - `npm run qa` / `qa:soak` 面向旧版 Web 环境，桌面端请用 `tools/cdp-verify-whale.mjs` 与 `tools/cdp-contract-whale.mjs`
 
 ---

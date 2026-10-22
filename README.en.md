@@ -64,22 +64,30 @@ And she actually knows what you are doing: instead of switching artwork on a tim
 
 ## Quick start
 
+**Simplest: install from npm** (no `git ls-remote` preflight, more reliable on restricted networks):
+
 ```powershell
 # DeepSeek Harness Desktop (Electron shell) — point the path at your install
 $Desktop = "D:\DeepseekHarnessDesktop"
 $Cli = "$Desktop\resources\app.asar\dsh\node_modules\@deepseek-ai\dsh-desktop-host\lib\cli.js"
 $env:ELECTRON_RUN_AS_NODE = "1"
-& "$Desktop\DeepSeek Harness.exe" --expose-internals $Cli plugin --profile desktop add github:Sutera-Diffusus/dsh-whale-musume
+& "$Desktop\DeepSeek Harness.exe" --expose-internals $Cli plugin --profile desktop add dsh-whale-musume
 ```
 
 ```powershell
 # Legacy web profile
+dsh plugin --profile web add dsh-whale-musume
+```
+
+You can still install from the GitHub source (equivalent; use it to follow the latest `main` commits):
+
+```powershell
 dsh plugin --profile web add github:Sutera-Diffusus/dsh-whale-musume
 ```
 
 Then **restart the host** (restart the desktop app, or restart `dsh web` and hit `Ctrl+F5`). She shows up in the bottom-right corner.
 
-> If the plugin store or `dsh plugin add` fails to install it, see [When the plugin store cannot install it](#when-the-plugin-store--dsh-plugin-add-cannot-install-it). A log that only shows `[exit 1]`, the expected miss on npm and fallback to git, and the `allowBuilds` note are all covered there.
+> If the plugin store or `dsh plugin add` fails to install it, see [When the plugin store cannot install it](#when-the-plugin-store--dsh-plugin-add-cannot-install-it). A log that only shows `[exit 1]`, `git ls-remote` timeouts on the git path, and the `allowBuilds` note are all covered there.
 
 <details>
 <summary>How do I verify the install actually worked?</summary>
@@ -473,7 +481,7 @@ No dates promised, but the direction is clear. Vote or add ideas in [Discussions
 **Known limitations** (boundaries, not backlog):
 
 - The desktop app is verified on Windows 10 / 11 only; macOS / Linux desktop builds are unverified
-- Not published to npm (install runs from the GitHub source): `dsh plugin add github:Sutera-Diffusus/dsh-whale-musume`
+- npm package published: `dsh plugin add dsh-whale-musume`; installing from the GitHub source remains available (`dsh plugin add github:Sutera-Diffusus/dsh-whale-musume`)
 - `npm run qa` / `qa:soak` target the legacy web host; use `tools/cdp-verify-whale.mjs` and `tools/cdp-contract-whale.mjs` for the desktop app
 
 ---
