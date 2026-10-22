@@ -31,6 +31,11 @@ jobs:
           node-version: 22
           registry-url: https://registry.npmjs.org
 
+      # Node 22 自带的 npm 可能还不理解 2026 年的 staged publishing / 新包占位流程；
+      # 固定升到最新 npm，避免把 2.5.x 发成 0.0.0-stage 占位。
+      - name: Upgrade npm
+        run: npm install -g npm@latest
+
       - name: Test
         run: node --test test/*test.mjs
 
