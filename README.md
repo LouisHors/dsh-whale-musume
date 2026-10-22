@@ -87,6 +87,8 @@ dsh plugin --profile web add github:Sutera-Diffusus/dsh-whale-musume
 
 装完**重启宿主**（桌面端重启应用；旧版 Web 重启 `dsh web` 后 `Ctrl+F5`），她就出现在右下角了。
 
+> **镜像同步提示**：新包在 npmmirror 上可能短暂显示 `0.0.0-stage`（发布占位版本）。看到这个版本不要装；在插件管理器的 Registry 选择器切到 **npm 官方源**，或等镜像同步。官方源核验：`npm view dsh-whale-musume version --registry=https://registry.npmjs.org` 应为 `2.5.0`。
+
 > 从插件市场或 `dsh plugin add` 装不上时，见[安装失败排查](#安装失败排查从插件市场--dsh-plugin-add-装不上)。日志被截成只剩 `[exit 1]`、走 git 源时的 `git ls-remote` 超时、还有 `allowBuilds` 提示，那一节都写了。
 
 <details>
