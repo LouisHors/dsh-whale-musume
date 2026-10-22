@@ -70,6 +70,8 @@ $env:ELECTRON_RUN_AS_NODE = "1"
 
 npm 包页：<https://www.npmjs.com/package/dsh-whale-musume>。也可以直接用本页资产 `dsh-whale-musume-plugin-v2.5.0.zip` 按本地路径安装。
 
+> 镜像同步提示：npmmirror 上可能短暂显示 `0.0.0-stage`（发布占位版本），不要装它；在插件管理器把 Registry 切到 **npm 官方源**，或等镜像同步。官方源核验：`npm view dsh-whale-musume version --registry=https://registry.npmjs.org` 应为 `2.5.0`。
+
 ## 兼容性
 
 `engines.dsh` 与 v2.4.0 完全一致，没有放宽也没有收紧：
@@ -89,6 +91,8 @@ v2.5.0 adds two features on top of the v2.4.0 compatibility release:
 - Six new achievements (four memory, plus 100-day and 365-day companionship), 45 total.
 
 The package is also published on npm as **`dsh-whale-musume@2.5.0`** — `dsh plugin add dsh-whale-musume` no longer needs a git preflight. The GitHub source install remains available for following `main`.
+
+> Mirror note: npmmirror may briefly show `0.0.0-stage` (the publish placeholder). Do not install that version; switch the plugin manager's Registry selector to the **official npm registry**, or wait for the mirror to sync. Check with `npm view dsh-whale-musume version --registry=https://registry.npmjs.org` — it should be `2.5.0`.
 
 `npm test`: **203/203**. No live Electron or browser visual acceptance was performed in this release; the panel follows the existing game-panel tokens and structure, but the final look should be eyeballed once.
 
