@@ -21,8 +21,6 @@ permissions:
 jobs:
   publish:
     runs-on: ubuntu-latest
-    env:
-      NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -36,10 +34,26 @@ jobs:
       - name: Test
         run: node --test test/*test.mjs
 
+      # 注意：不能直接用 `env.NODE_AUTH_TOKEN != ''` 判断——
+      # secret 未配置时 env 键不存在，表达式按 null 处理，null != '' 为真，
+      # 结果会拿空 token 去 publish（实测 404）。这里用脚本显式判断。
+      - name: Check npm token
+        id: npm_token
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          if [ -n "${NODE_AUTH_TOKEN:-}" ]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Publish if NPM_TOKEN is configured
-        if: ${{ env.NODE_AUTH_TOKEN != '' }}
+        if: steps.npm_token.outputs.configured == 'true'
         run: npm publish --access public --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Skip notice
-        if: ${{ env.NODE_AUTH_TOKEN == '' }}
+        if: steps.npm_token.outputs.configured != 'true'
         run: echo "NPM_TOKEN 未配置，跳过 npm 发布；添加 secret 后可手动重跑本工作流。"
