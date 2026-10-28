@@ -68,6 +68,10 @@
     status: readPref("statusToast", "1") !== "0",
     statusDone: readPref("statusToastDone", "1") !== "0",
     statusAsk: readPref("statusToastAsk", "1") !== "0",
+    wiki: readPref("wiki", "0") !== "0",
+    wikiRoot: readPref("wikiRoot", "~/hors/my-code-wiki"),
+    wikiEvery: Math.max(15, Number(readPref("wikiEvery", "180")) || 180),
+    wikiAuto: readPref("wikiAuto", "1") !== "0",
   };
 
   var state = {
@@ -81,6 +85,10 @@
     statusBusy: false,
     cards: [],
     layer: null,
+    wikiLastAt: 0,
+    wikiSnoozeUntil: 0,
+    wikiBusy: false,
+    wikiSummary: null,
   };
 
   /* ---------------- 小卡片 ---------------- */
@@ -215,6 +223,15 @@
    *          meta?:string, actions?:Array<{label:string, primary?:boolean, onClick:Function}>,
    *          kind?:string, ttl?:number, refId?:string}} options
    */
+  function tryOpenSession(sessionId) {
+    var id = String(sessionId || "");
+    if (id === "") return false;
+    try {
+      if (typeof window.__dshWhaleOpenSession === "function" && window.__dshWhaleOpenSession(id)) return true;
+    } catch {}
+    return false;
+  }
+
   function showCard(options) {
     ensureStyle();
     var layer = ensureLayer();
@@ -278,6 +295,16 @@
         event.stopPropagation();
       });
     });
+
+    /* 带会话的卡片可以点开对应会话（点了按钮不算） */
+    if (options.sessionId) {
+      card.style.cursor = "pointer";
+      card.title = "点我打开这个会话";
+      card.addEventListener("click", function (event) {
+        if (event.target && event.target.closest && event.target.closest(".dswe-act, .dswe-close")) return;
+        tryOpenSession(options.sessionId);
+      });
+    }
 
     layer.appendChild(card);
     state.cards.push(card);
@@ -495,8 +522,7 @@
       removeCardByKey(item.refId || "");
       return;
     }
-    /* 卡片上的确认按钮只做「收起卡片」：客户端没有公开的「切到某个会话」API，
-       所以「知道啦 / 知道了」不负责导航，关掉卡片后用户自己在侧边栏点会话。 */
+    /* 卡片本身可点开会话（见 showCard 的 sessionId 分支）；按钮只负责收卡片。 */
     var dismissKey = "";
     function dismissAction(label) {
       return {
@@ -719,6 +745,137 @@
     }
   }
 
+  /* ---------------- 知识库管理员 ---------------- */
+
+  function wikiApi(action, force) {
+    var suffix = action + "?root=" + encodeURIComponent(prefs.wikiRoot || "");
+    if (force) suffix += "&refresh=1";
+    return fetch(API + "wiki/" + suffix, { cache: "no-store" }).then(function (response) { return response.json(); });
+  }
+
+  function wikiCounts(card) {
+    var counts = card && card.counts ? card.counts : {};
+    var bits = [];
+    if (counts.inbox) bits.push("待审 " + counts.inbox);
+    if (counts.stale) bits.push("过时 " + counts.stale);
+    if (counts.todos) bits.push("待办 " + counts.todos);
+    if (counts.broken) bits.push("断链 " + counts.broken);
+    return bits;
+  }
+
+  function showWikiCard(payload) {
+    var card = payload && payload.card ? payload.card : {};
+    var plan = Array.isArray(card.plan) ? card.plan : [];
+    var bits = wikiCounts(card);
+    showCard({
+      kind: "wiki",
+      key: "wiki",
+      icon: "📚",
+      badge: "知识库",
+      title: "知识库该整理了",
+      body: plan.length ? clipText(plan.join("；"), 150) : "巡检发现一些该处理的东西。",
+      meta: bits.concat(card.pages ? [card.pages + " 篇"] : []).join(" · "),
+      actions: [
+        { label: "开始整理", primary: true, onClick: function () { startWikiMaintain(); } },
+        { label: "看详情", onClick: function () { showWikiDetail(payload); } },
+        { label: "明天再说", onClick: function () { state.wikiSnoozeUntil = Date.now() + 86400000; removeCardByKey("wiki"); showSpeechCard({ icon: "🐳", body: "好，明天再提醒你整理知识库。" }); } }
+      ]
+    });
+  }
+
+  function showWikiDetail(payload) {
+    var summary = payload && payload.summary ? payload.summary : {};
+    var card = payload && payload.card ? payload.card : {};
+    var bits = [];
+    var inbox = summary.inbox && Array.isArray(summary.inbox.samples) ? summary.inbox.samples : [];
+    if (inbox.length) bits.push("📥 " + clipText(inbox[0].title || inbox[0].path, 22));
+    var stale = summary.stale && Array.isArray(summary.stale.samples) ? summary.stale.samples : [];
+    if (stale.length) bits.push("🕸 " + clipText(String(stale[0].path).replace(/^wiki\//, ""), 22));
+    var todos = summary.todos && Array.isArray(summary.todos.samples) ? summary.todos.samples : [];
+    if (todos.length) bits.push("📝 " + clipText(String(todos[0].path).replace(/^wiki\//, ""), 20) + " ×" + todos[0].count);
+    var broken = summary.links && Array.isArray(summary.links.samples) ? summary.links.samples : [];
+    if (broken.length) bits.push("🔗 " + clipText(String(broken[0].target), 22));
+    var counts = wikiCounts(card);
+    showCard({
+      kind: "wiki",
+      key: "wiki",
+      icon: "📚",
+      badge: "知识库详情",
+      title: "巡检详情",
+      body: clipText(bits.length ? bits.join("　") : "没发现明显问题。", 130),
+      meta: counts.concat(summary.lastCommit ? ["git " + summary.lastCommit.date] : []).join(" · "),
+      actions: [
+        { label: "开始整理", primary: true, onClick: function () { startWikiMaintain(); } },
+        { label: "打开目录", onClick: function () { openWikiFolder(); } },
+        { label: "返回", onClick: function () { showWikiCard(payload); } }
+      ]
+    });
+  }
+
+  function openWikiFolder() {
+    fetch(API + "wiki/open?root=" + encodeURIComponent(prefs.wikiRoot || ""), { cache: "no-store" })
+      .then(function (response) { return response.json(); })
+      .then(function (result) {
+        if (!result || !result.ok) showSpeechCard({ icon: "🐳", badge: "知识库", title: "打不开目录", body: clipText((result && result.error) || "路径不合法", 80) });
+      }, function () {});
+  }
+
+  function startWikiMaintain() {
+    if (state.wikiBusy) return;
+    state.wikiBusy = true;
+    showSpeechCard({ icon: "🐳", badge: "知识库", title: "我去整理一下", body: "正在开一个新会话…" });
+    fetch(API + "wiki/maintain?root=" + encodeURIComponent(prefs.wikiRoot || ""), { method: "POST", cache: "no-store" })
+      .then(function (response) { return response.json(); })
+      .then(function (result) {
+        state.wikiBusy = false;
+        if (result && result.ok) {
+          removeCardByKey("wiki");
+          var sid = result.sessionId || "";
+          if (sid) state.wikiSessionId = sid;
+          showCard({
+            kind: "notice",
+            key: "wiki-open",
+            icon: "📚",
+            badge: "知识库",
+            title: "整理会话已开",
+            body: "遇到要你拍板的地方，我会弹「等你回答」卡片。",
+            meta: "侧栏里能看到它干活",
+            actions: [
+              { label: "去看看", primary: true, onClick: function () { if (!tryOpenSession(sid)) removeCardByKey("wiki-open"); } },
+              { label: "知道了", onClick: function () { removeCardByKey("wiki-open"); } }
+            ]
+          });
+          return;
+        }
+        showSpeechCard({ icon: "🐳", badge: "知识库", title: "没能开整理会话", body: clipText((result && result.error) || "宿主不支持自动开会话", 120) });
+      }, function (error) {
+        state.wikiBusy = false;
+        showSpeechCard({ icon: "🐳", badge: "知识库", title: "没能开整理会话", body: clipText(String((error && error.message) || error), 120) });
+      });
+  }
+
+  async function tickWiki() {
+    if (!prefs.wiki || document.hidden) return;
+    if (Date.now() - state.wikiLastAt < prefs.wikiEvery * 60000) return;
+    state.wikiLastAt = Date.now();
+    try {
+      var result = await wikiApi("scan", false);
+      if (!result || !result.ok) return;
+      state.wikiSummary = result;
+      if (!result.card || !result.card.needsAttention) {
+        removeCardByKey("wiki");
+        return;
+      }
+      if (!prefs.wikiAuto || Date.now() < state.wikiSnoozeUntil) return;
+      for (var index = 0; index < state.cards.length; index += 1) {
+        if (state.cards[index].dsweKey === "wiki") return;
+      }
+      showWikiCard(result);
+    } catch (error) {
+      /* 巡库失败保持安静，下一轮再试 */
+    }
+  }
+
   /* ---------------- 偏好同步 / 启动 ---------------- */
 
   function applyPrefs() {
@@ -729,6 +886,10 @@
     prefs.status = readPref("statusToast", "1") !== "0";
     prefs.statusDone = readPref("statusToastDone", "1") !== "0";
     prefs.statusAsk = readPref("statusToastAsk", "1") !== "0";
+    prefs.wiki = readPref("wiki", "0") !== "0";
+    prefs.wikiRoot = readPref("wikiRoot", "~/hors/my-code-wiki");
+    prefs.wikiEvery = Math.max(15, Number(readPref("wikiEvery", "180")) || 180);
+    prefs.wikiAuto = readPref("wikiAuto", "1") !== "0";
   }
 
   function onPrefs(event) {
@@ -736,6 +897,11 @@
     applyPrefs();
     if (key === "linuxdo" && prefs.linuxdo) state.lastPushAt = 0;
     if (key === "statusToast" && prefs.status) state.lastSeq = -1;
+    if (key === "wiki" || key === "wikiRoot" || key === "wikiEvery" || key === "wikiAuto") {
+      state.wikiLastAt = 0;
+      if (key === "wiki" || key === "wikiRoot") removeCardByKey("wiki");
+      if (key === "wiki" && prefs.wiki) tickWiki();
+    }
   }
   window.addEventListener(PREFS_EVENT, onPrefs);
 
@@ -778,6 +944,8 @@
     timers.push(setInterval(sweepCards, 1200));
     timers.push(setInterval(tickMurmur, 5000));
     timers.push(setInterval(pollStatus, 4000));
+    timers.push(setInterval(tickWiki, 60000));
+    tickWiki();
     window.addEventListener("resize", place);
     window.addEventListener("scroll", place, true);
     var pet = document.querySelector("[data-dsh-whale-root]");
@@ -804,6 +972,13 @@
     speechCard: showSpeechCard,
     speechQueue: function () { return { active: speechActive !== null, pending: speechQueue.length }; },
     murmur: speakMurmur,
+    wiki: {
+      scan: function (force) { return wikiApi("scan", !!force); },
+      maintain: startWikiMaintain,
+      tick: tickWiki,
+      last: function () { return state.wikiSummary; },
+      open: openWikiFolder
+    },
     removeCard: removeCard,
     previewFeed: function () {
       return nextFeedCard("");
