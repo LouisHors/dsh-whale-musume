@@ -7,6 +7,8 @@
 - **摸鱼推送（linux.do 最新话题）**：宿主新增 `lib/linuxdo.js`，用 `/usr/bin/curl` 抓 `https://linux.do/latest.rss`（Node fetch 过不了 Cloudflare 的 TLS 指纹，内置 5 分钟缓存、失败退避 10 分钟、并发单飞），解析 RSS 成条目并暴露 `GET /api/dsh-whale-musume/linuxdo/feed`；`GET /api/dsh-whale-musume/linuxdo/open?url=` 只放行 linux.do 的 https 链接，用系统浏览器打开。前端扩展层 `assets/whale-moe-extras.js` 在 DSH 忙（`[data-chat-running]` / 待答 / 待批准）时按间隔随机推一条你勾选版块的话题卡片，`localStorage` 记 400 条已读；设置 → 看板娘 → 「摸鱼与提醒」可关、选版块、调间隔**（默认关闭）**
 - **会话状态小卡片**：宿主新增 `lib/notifications.js`，订阅 `session/event` 折叠成前端卡片——`turn/end completed` → 回复完成（带会话标题与耗时），`turn/end error / max-tokens` → 出错/被截断，`tool/call ask_user_question` → 等你回答，`approval/asked` → 等你批准，`approval/decided` 与 `user-question-reply` → 发 `resolved` 撤卡；靠 `origin === "subagent"` / `delegationDepth > 0` 过滤子代理内部会话（**刻意不看 `parentSession`**：普通 fork 也带它）。前端每 4 秒带 `since` 游标拉 `GET /api/dsh-whale-musume/notify/events`，首拉只对齐游标不重放历史。设置同组可分别关「完成/出错」与「等你回答/批准」
 - 状态卡不做会话跳转：当前客户端没有公开的「切换到某会话」API，卡片只显示会话标题，点击由用户在侧边栏自己选
+- **表现层热重载（改 assets 不用重启）**：宿主新增 `GET /api/dsh-whale-musume/assets-rev`（assets 目录的 size+mtime 指纹）；静态资源路由对代码类文件（css/js/json）改发 `Cache-Control: no-store`，图片仍可缓存。前端每 2 秒对一次指纹，变了就先 `teardown` 旧实例（拆 `<style>`/`<script>`/桌宠根节点/卡片层/粒子/小游戏，清 idle 定时器与 MutationObserver，调 `__dshWhaleExtras.destroy()`），再用 `cache: "no-store"` 重新拉一遍资源重建，全程不需要刷新页面。`assets/dsh-whale-moe.js` 与 `assets/whale-moe-extras.js` 因此都补了幂等的自拆逻辑（脚本重复执行时先销毁上一份）
+- 顺带确认：生产版桌面端没有 reload 菜单，DevTools 里 `location.reload()` 会走桌面壳的 `did-fail-load` → 恢复窗口弹「重启」，所以热重载不能依赖手动刷新
 
 ### 适配
 
@@ -22,7 +24,8 @@
 ### 测试
 
 - `test/dsh-engines.test.mjs` 真值表跟着扩：放行 0.1.0-rc.6 到 0.3.7 之间各段含预发布，拒绝 `0.1.0-rc.5` 之前与 `0.4.0` 起；`dshReleases` 断言补 `0.2.1-rc.3`，note 断言新区间字面量。单元与契约仍 **203 全绿**
-- 新增 `test/linuxdo.test.mjs`（9 例：RSS 解析/实体解码/正文清洗/版块筛选/随机去重/已读合并/URL 白名单/TTL+退避/并发单飞）与 `test/notifications.test.mjs`（12 例：完成/出错/截断/取消静默、子代理门、提问与审批折叠、resolved、标题兜底、环形缓冲、坏数据不抛、边界函数）；`desktop-client` 与 `v250-*` 的脚本数断言从 2 段改成 3 段（core + presenter + extras）。全量 **224 全绿**
+- 新增 `test/linuxdo.test.mjs`（9 例：RSS 解析/实体解码/正文清洗/版块筛选/随机去重/已读合并/URL 白名单/TTL+退避/并发单飞）与 `test/notifications.test.mjs`（12 例：完成/出错/截断/取消静默、子代理门、提问与审批折叠、resolved、标题兜底、环形缓冲、坏数据不抛、边界函数）；`desktop-client` 与 `v250-*` 的脚本数断言从 2 段改成 3 段（core + presenter + extras）
+- 热重载相关的断言：`desktop-client` 的 `c1/c2` 把 `/assets-rev` 信标纳入宿主路由白名单；`f1/f2` 的引导标志从 `true` 改成时间戳（用于判断「是否又一次热重载」）；`f3` 改成「重新物化会先拆旧再注新」——断言样式/脚本始终各一份、资源按 5→10 次重拉，而不是「不重复拉取」。`tools/dom-stub.mjs` 增加 `HOST_REV_ROUTE` 桩（返回空 rev，让测试里不启动后台轮询）。全量 **224 全绿**
 
 ## v2.5.0 (2026-10-21)
 

@@ -601,7 +601,9 @@ DSH 桌面端自带 `@deepseek-ai/dsh-hmr`，默认 `root: []`（只热更配置
 ```
 
 - **host 半边**（`lib/*.js`）：保存即热重载，实测 2 秒内新路由上线，不用重启 DSH（首次加上这段 patch 本身也会触发一次重组，把已在运行的插件换成磁盘上的新代码）
-- **client 半边**（`lib/client.js`、`assets/*.js`、`assets/generated/*`）：由浏览器按需拉取，改完在应用窗口里刷新一次页面（⌘R）即可，同样不用重启
+- **client 半边**（`lib/client.js`）：DSH 内置的 `dsh-client-hmr` 每 500ms 轮询一次插件 bundle 的 mtime/ctime/size，变了就推送 `rebuilt` 帧，浏览器把整个客户端插件拆掉重挂，同样 2 秒内生效。**实测**：改 `lib/client.js` 后能收到 `{"type":"rebuilt","id":"dsh-whale-musume"}` 并自动换新
+- **表现层资源**（`assets/*.js`、`assets/*.css`、`assets/generated/*`）：插件自己兜底——`GET /api/dsh-whale-musume/assets-rev` 返回 assets 目录的 mtime 指纹，前端每 2 秒对一次，指纹变了就先把旧实例拆干净（桌宠、脚本、样式、卡片层、定时器、MutationObserver）、`fetch(..., { cache: "no-store" })` 重新拉一遍资源。**实测**：改 CSS 后样式文本 2 秒内更新、页面上始终只有一个 `[data-dsh-whale-root]`
+- 生产版桌面端**没有**「刷新页面」入口（`reloadPageMenu` 只在 development 构建里），在 DevTools 里 `location.reload()` 会被桌面壳当成主帧加载失败、弹「DeepSeek Harness 无法使用 → 重启」——所以日常魔改靠上面两条自动热重载，不要手动 reload
 - 不配这段也能用：改动会在下一次 profile 重组（插件市场里开关任一插件、或改 `cordis.patch.yml`）时生效
 
 

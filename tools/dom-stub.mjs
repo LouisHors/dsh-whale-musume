@@ -34,6 +34,8 @@ import { fileURLToPath } from "node:url";
 export const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 /** 宿主资源路由(与 lib/client.js 的 BASE 常量同源)。 */
 export const HOST_ROUTE = "/api/dsh-whale-musume/assets";
+/** 表现层热重载信标路由（见 lib/index.js 的 assetsRevision）。 */
+export const HOST_REV_ROUTE = "/api/dsh-whale-musume/assets-rev";
 export const HOST_QUERY = "?f=";
 /** 合成来源:.invalid 是保留 TLD,永不可解析 —— 桩里也从不发起真实网络请求。 */
 export const HOST_ORIGIN = "http://dsh-desktop-host.invalid";
@@ -960,6 +962,14 @@ export function createAssetRouteFetch(options = {}) {
       entry.external = true;
       calls.push(entry);
       return Promise.resolve(makeResponse("", 0, false));
+    }
+    if (target === HOST_REV_ROUTE) {
+      entry.served = true;
+      entry.status = 200;
+      calls.push(entry);
+      // rev 返回空串:客户端据此判定「宿主没给指纹」,不会启动轮询定时器,
+      // 测试里就不会有 2 秒一次的后台请求,断言保持确定性。
+      return Promise.resolve(makeResponse('{"ok":true,"rev":""}', 200, true));
     }
     if (!target.startsWith(HOST_ROUTE)) {
       entry.status = 404;

@@ -7,6 +7,16 @@
   "use strict";
   if (!root || !root.document) return;
 
+  /* 热重载：本脚本被重新注入时（client.js 会先拆掉旧 DOM），先把上一轮
+     实例的定时器、MutationObserver 和监听器收干净，避免两个实例抢位置。 */
+  if (typeof root.__dshWhaleMoeTeardown === "function") {
+    try {
+      root.__dshWhaleMoeTeardown();
+    } catch (error) {
+      /* 旧版本没有 teardown 时忽略 */
+    }
+  }
+
   var core = root.DshWhaleMoeCore;
   var doc = root.document;
   var VIEW_ATTR = "data-dsh-whale-view";
@@ -3653,6 +3663,7 @@
     function init() {
       safeReconcile();
       observer = new root.MutationObserver(schedule);
+      root.__dshWhaleMoeObserver = observer;
       observer.observe(doc.documentElement, {
         attributes: true,
         childList: true,
@@ -3662,6 +3673,29 @@
     if (doc.readyState === "loading") doc.addEventListener("DOMContentLoaded", init, { once: true });
     else init();
   }
+
+  /* 热重载用：拆掉当前实例的一切副作用，之后脚本可以干净地重新 start()。 */
+  root.__dshWhaleMoeTeardown = function () {
+    try {
+      if (root.__dshWhaleMoeIdleTimer) {
+        root.clearInterval(root.__dshWhaleMoeIdleTimer);
+        root.__dshWhaleMoeIdleTimer = null;
+      }
+      if (root.__dshWhaleMoeObserver) {
+        try {
+          root.__dshWhaleMoeObserver.disconnect();
+        } catch (error) {
+          /* ignore */
+        }
+        root.__dshWhaleMoeObserver = null;
+      }
+      removeRoot();
+      weatherFxStop();
+    } catch (error) {
+      /* 清理失败也要允许重新启动 */
+    }
+    root.__dshWhaleMoeStarted = false;
+  };
 
   root.__dshWhaleMoeVersion = "2.5.0";
   root.__dshWhaleMoeDebug = { state: "boot", pose: null, line: "", view: "home" };

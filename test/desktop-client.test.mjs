@@ -33,6 +33,7 @@ import assert from "node:assert/strict";
 
 import {
   HOST_QUERY,
+  HOST_REV_ROUTE,
   HOST_ROUTE,
   createAssetRouteFetch,
   createClientHostHarness,
@@ -189,13 +190,19 @@ test("b3 注入顺序 style → core → presenter → extras,三个 <script> �
  * c. 三段资源都经宿主路由
  * ------------------------------------------------------------------ */
 
-test("c1 四段资源全部经宿主路由获取,顺序 css → core → presenter → extras", async () => {
+test("c1 四段资源全部经宿主路由获取,顺序 css → core → presenter → extras(末尾再问一次热重载信标)", async () => {
   const { env } = await boot();
 
   assert.deepEqual(
     env.fetchCalls.map((call) => call.url),
-    [`${ROUTE}dsh-whale-moe.css`, `${ROUTE}whale-moe-core.js`, `${ROUTE}dsh-whale-moe.js`, `${ROUTE}whale-moe-extras.js`],
-    "四段资源必须按 样式 → 状态机 → 表现层 → 扩展层 的顺序走宿主路由"
+    [
+      `${ROUTE}dsh-whale-moe.css`,
+      `${ROUTE}whale-moe-core.js`,
+      `${ROUTE}dsh-whale-moe.js`,
+      `${ROUTE}whale-moe-extras.js`,
+      HOST_REV_ROUTE,
+    ],
+    "四段资源必须按 样式 → 状态机 → 表现层 → 扩展层 的顺序走宿主路由,之后再取一次 assets 指纹"
   );
   for (const call of env.fetchCalls) {
     assert.equal(call.external, false, `不应有绝对 http(s) 请求:${call.url}`);
@@ -210,7 +217,10 @@ test("c2 无外部 http(s) 请求,也无越出宿主路由的请求", async () =
 
   assert.deepEqual(plain(env.externalFetches()), [], "不得访问任何外部地址");
   for (const call of env.fetchCalls) {
-    assert.ok(call.url.startsWith(ROUTE), `请求越出宿主路由:${call.url}`);
+    assert.ok(
+      call.url.startsWith(ROUTE) || call.url === HOST_REV_ROUTE,
+      `请求越出宿主路由:${call.url}`
+    );
   }
 });
 
@@ -367,13 +377,14 @@ test("f1 物化即引导且二次物化命中 loadCache:factory 只执行一次"
   assert.equal(first, second, "同一 id 的物化必须记忆化");
   assert.equal(env.moduleSystem.factoryRuns.filter((run) => run.id === PLUGIN_ID).length, 1, "factory 应只执行 1 次");
   // 惰性 CJS 契约(0.2.0-rc.2):引导副作用在 factory 物化期发生,因此仅物化、未 apply 时标志就已置位。
-  assert.equal(env.window[BOOT_FLAG], true, "物化即引导:仅物化(未 apply)时 BOOT_FLAG 已置位");
+  // 2.5.0 起 BOOT_FLAG 存的是引导时间戳(而不是 true),用于判断「是不是又一次热重载」。
+  assert.equal(typeof env.window[BOOT_FLAG], "number", "物化即引导:仅物化(未 apply)时已记下引导时间戳");
   assert.equal(env.fetchCalls.length, 1, "物化返回时已同步发出第 1 个资源请求");
 });
 
 test("f2 二次 apply 不重复注入(window 引导标志幂等)", async () => {
   const { env } = await boot();
-  assert.equal(env.window[BOOT_FLAG], true, "引导后应置上 window 级幂等标志");
+  assert.equal(typeof env.window[BOOT_FLAG], "number", "引导后应记下 window 级引导时间戳");
 
   const warningsAfterBoot = env.warnings().length;
   assert.doesNotThrow(() => env.apply(PLUGIN_ID), "二次 apply 不得抛错");
@@ -381,13 +392,13 @@ test("f2 二次 apply 不重复注入(window 引导标志幂等)", async () => {
 
   assert.equal(env.styles().length, 1, "样式不得二次注入");
   assert.equal(env.scripts().length, 3, "脚本不得二次注入");
-  assert.equal(env.fetchCalls.length, 4, "资源不得二次拉取");
+  assert.equal(env.fetchCalls.length, 5, "资源不得二次拉取(4 段资源 + 1 次热重载信标)");
   // 真实宿主里二次 apply 只会发生在旧 fiber 已卸载之后(HMR);此处是同一 fiber 的
   // 重复调用,slots 冲突告警属预期,只记录不断言。
   assert.ok(env.warnings().length >= warningsAfterBoot);
 });
 
-test("f3 HMR 重注册 + 重新物化 + 再次 apply 仍不重复注入", async () => {
+test("f3 HMR 重新物化会先拆旧再注新(热重载不再叠加)", async () => {
   const { env } = await boot();
   const original = env.moduleSystem.loadCache.get(PLUGIN_ID);
 
@@ -398,9 +409,12 @@ test("f3 HMR 重注册 + 重新物化 + 再次 apply 仍不重复注入", async 
   env.apply(PLUGIN_ID);
   await env.idle();
 
-  assert.equal(env.styles().length, 1, "HMR 后不得重复注入样式");
-  assert.equal(env.scripts().length, 3, "HMR 后不得重复注入脚本");
-  assert.equal(env.fetchCalls.length, 4, "HMR 后不得重复拉资源");
+  // 2.5.0 起重新物化会走 teardownPreviousBoot():旧 <style>/<script> 先被摘掉,
+  // 再按新一轮引导注入 3 个脚本、重新拉 4 个资源——DOM 始终只有一份。
+  assert.equal(env.styles().length, 1, "HMR 后旧样式应被移除,只剩新版本一份");
+  assert.equal(env.scripts().length, 3, "HMR 后旧脚本应被移除,只剩新版本 3 段");
+  assert.equal(env.fetchCalls.length, 10, "HMR 后应重新拉一轮资源(5 + 5,含热重载信标)");
+  assert.equal(typeof env.window[BOOT_FLAG], "number");
 });
 
 /* ------------------------------------------------------------------ *

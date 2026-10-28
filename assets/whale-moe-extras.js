@@ -7,7 +7,15 @@
  */
 (function () {
   "use strict";
-  if (window.__dshWhaleExtras) return;
+  /* 热重载：新版本脚本被重新注入时，先把上一轮实例拆干净（定时器、
+     监听器、卡片层），再重新 start()，否则会叠两套轮询。 */
+  if (window.__dshWhaleExtras && typeof window.__dshWhaleExtras.destroy === "function") {
+    try {
+      window.__dshWhaleExtras.destroy();
+    } catch (error) {
+      /* ignore */
+    }
+  }
 
   var API = "/api/dsh-whale-musume/";
   var PREFS_EVENT = "whale-moe-prefs-change";
@@ -15,6 +23,8 @@
   var MAX_CARDS = 3;
   var SEEN_KEY = "whale-moe:linuxdoSeen";
   var SEEN_CAP = 400;
+  var timers = [];
+  var petObserver = null;
 
   function readPref(key, fallback) {
     try {
@@ -496,12 +506,36 @@
     prefs.statusAsk = readPref("statusToastAsk", "1") !== "0";
   }
 
-  window.addEventListener(PREFS_EVENT, function (event) {
+  function onPrefs(event) {
     var key = event && event.detail ? event.detail.key : "";
     applyPrefs();
     if (key === "linuxdo" && prefs.linuxdo) state.lastPushAt = 0;
     if (key === "statusToast" && prefs.status) state.lastSeq = -1;
-  });
+  }
+  window.addEventListener(PREFS_EVENT, onPrefs);
+
+  /* 拆掉本实例：定时器、监听器、观察者、DOM。由下一轮脚本或 client.js 调用。 */
+  function destroy() {
+    for (var i = 0; i < timers.length; i += 1) window.clearInterval(timers[i]);
+    timers = [];
+    if (petObserver !== null) {
+      try {
+        petObserver.disconnect();
+      } catch (error) {
+        /* ignore */
+      }
+      petObserver = null;
+    }
+    window.removeEventListener(PREFS_EVENT, onPrefs);
+    window.removeEventListener("resize", place);
+    window.removeEventListener("scroll", place, true);
+    var layer = document.querySelector('[data-dsh-whale-alerts="stack"]');
+    if (layer !== null) layer.remove();
+    var style = document.querySelector('style[data-dsh-whale-alerts="css"]');
+    if (style !== null) style.remove();
+    state.cards = [];
+    state.layer = null;
+  }
 
   var started = false;
   function start() {
@@ -510,17 +544,18 @@
     ensureStyle();
     ensureLayer();
     place();
-    setInterval(function () {
+    timers.push(setInterval(function () {
       if (state.cards.length > 0) place();
-    }, 1200);
-    setInterval(tickFeed, 5000);
-    setInterval(pollStatus, 4000);
+    }, 1200));
+    timers.push(setInterval(tickFeed, 5000));
+    timers.push(setInterval(pollStatus, 4000));
     window.addEventListener("resize", place);
     window.addEventListener("scroll", place, true);
     var pet = document.querySelector("[data-dsh-whale-root]");
     if (pet !== null && typeof MutationObserver === "function") {
       try {
-        new MutationObserver(place).observe(pet, { attributes: true, attributeFilter: ["style", "class"] });
+        petObserver = new MutationObserver(place);
+        petObserver.observe(pet, { attributes: true, attributeFilter: ["style", "class"] });
       } catch (error) {
         /* ignore */
       }
@@ -528,6 +563,7 @@
   }
 
   window.__dshWhaleExtras = {
+    destroy: destroy,
     prefs: prefs,
     state: state,
     place: place,
