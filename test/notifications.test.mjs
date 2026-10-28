@@ -82,14 +82,14 @@ test("回答提问后发 resolved，前端据此撤卡", () => {
   const hub = new NotificationHub();
   hub.ingest(fakeSession("s1"), {
     type: "user/message",
-    data: { source: { kind: "user-question-reply", callId: "call-9" }, message: { content: [] } },
+    data: { source: { kind: "user-question-reply", callId: "call-9" }, content: [] },
   });
   assert.deepEqual(hub.snapshot(0).items[0], { seq: 1, at: hub.now(), kind: "resolved", refId: "question:call-9" });
 });
 
 test("没有正式标题时用首条用户消息兜底，session/title 会覆盖它", () => {
   const hub = new NotificationHub();
-  hub.ingest(fakeSession("s1"), { type: "user/message", data: { message: { content: [{ type: "text", text: "帮我看下这个报错" }] } } });
+  hub.ingest(fakeSession("s1"), { type: "user/message", data: { content: [{ type: "text", text: "帮我看下这个报错" }] } });
   hub.ingest(fakeSession("s1"), { type: "turn/end", data: { turn: 1, reason: { kind: "completed" } } });
   assert.equal(hub.snapshot(0).items[0].title, "帮我看下这个报错");
 
@@ -133,4 +133,32 @@ test("clip / formatDuration / questionTextOf 的边界", () => {
     questionTextOf(JSON.stringify({ questions: [{ question: "选哪个？" }, { question: "为什么？" }] })),
     "选哪个？（共 2 个问题）",
   );
+});
+
+test("提问的 tool/result 回来就撤卡（0.2.1-rc.3 回答常走这条）", () => {
+  const hub = new NotificationHub();
+  hub.ingest(fakeSession("s1"), {
+    type: "tool/call",
+    data: { name: "ask_user_question", arguments: JSON.stringify({ questions: [{ question: "选哪个？" }] }), callId: "call-7" },
+  });
+  assert.equal(hub.snapshot(0).items.at(-1).refId, "question:call-7");
+  hub.ingest(fakeSession("s1"), { type: "tool/result", data: { message: { callId: "call-7", content: [] } } });
+  assert.deepEqual(hub.snapshot(0).items.at(-1), { seq: 2, at: hub.now(), kind: "resolved", refId: "question:call-7" });
+  // 再收到一次同样的 tool/result 不会重复撤卡
+  assert.equal(hub.ingest(fakeSession("s1"), { type: "tool/result", data: { message: { callId: "call-7", content: [] } } }), null);
+});
+
+test("一轮结束时清掉所有悬空卡片，避免越堆越多", () => {
+  const hub = new NotificationHub();
+  hub.ingest(fakeSession("s1"), {
+    type: "tool/call",
+    data: { name: "ask_user_question", arguments: JSON.stringify({ questions: [{ question: "选哪个？" }] }), callId: "call-1" },
+  });
+  hub.ingest(fakeSession("s1"), { type: "approval/asked", data: { id: "ap-1", toolName: "shell", callId: "call-2" } });
+  hub.ingest(fakeSession("s1"), { type: "turn/end", data: { turn: 1, reason: { kind: "completed" } }, time: 1_000 });
+  const refs = hub.snapshot(0).items.filter((item) => item.kind === "resolved").map((item) => item.refId);
+  assert.deepEqual(refs.sort(), ["approval:ap-1", "question:call-1"]);
+  // 清完之后再来一轮，不会重复撤
+  hub.ingest(fakeSession("s1"), { type: "turn/end", data: { turn: 2, reason: { kind: "completed" } } });
+  assert.equal(hub.snapshot(0).items.filter((item) => item.kind === "resolved").length, 2);
 });

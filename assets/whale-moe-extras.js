@@ -153,6 +153,30 @@
     }, 190);
   }
 
+  /** 兜底回收：即使某个 ttl 定时器在重入/替换中被清掉，也不会留下永久卡片。 */
+  function sweepCards(now) {
+    var nowTs = typeof now === "number" ? now : Date.now();
+    var alive = [];
+    state.cards.forEach(function (card) {
+      if (typeof card.dsweExpireAt === "number" && card.dsweExpireAt <= nowTs) removeCard(card);
+      else alive.push(card);
+    });
+    state.cards = alive;
+  }
+
+  /** 一轮结束后，把该会话还挂着的提问/审批卡一起收走。 */
+  function dropSessionPending(sessionId) {
+    if (!sessionId) return;
+    state.cards.slice().forEach(function (card) {
+      if (card.dsweSession !== sessionId) return;
+      var kind = card.getAttribute("data-dsh-whale-alert");
+      if (kind !== "status") return;
+      var text = card.textContent || "";
+      if (text.indexOf("等你回答") < 0 && text.indexOf("需要批准") < 0 && text.indexOf("需要你") < 0) return;
+      removeCard(card);
+    });
+  }
+
   function removeCardByKey(key) {
     for (var index = state.cards.length - 1; index >= 0; index -= 1) {
       if (state.cards[index].dsweKey === key) removeCard(state.cards[index]);
@@ -188,6 +212,7 @@
     card.setAttribute("data-dsh-whale-alert", options.kind || "notice");
     card.dsweKey = key;
     card.dsweRefId = options.refId || "";
+    card.dsweSession = options.sessionId || "";
 
     var head = el("div", "dswe-head");
     if (options.icon) head.appendChild(el("span", "dswe-ico", options.icon));
@@ -241,6 +266,7 @@
     place();
 
     if (typeof options.ttl === "number" && options.ttl > 0) {
+      card.dsweExpireAt = Date.now() + options.ttl;
       card.dsweTimer = setTimeout(function () {
         removeCard(card);
       }, options.ttl);
@@ -374,6 +400,12 @@
       };
     }
 
+    if (item.kind === "turn-done") {
+      dropSessionPending(item.sessionId);
+    }
+    if (item.kind === "turn-error") {
+      dropSessionPending(item.sessionId);
+    }
     if (item.kind === "turn-done" && prefs.statusDone) {
       var duration = formatDuration(item.durationMs);
       dismissKey = "done:" + item.sessionId + ":" + item.seq;
@@ -385,6 +417,7 @@
         title: sessionLabel(item) + " 回复好了",
         body: duration === "" ? "" : "这一轮用时 " + duration,
         meta: "DSH · 会话",
+        sessionId: item.sessionId,
         ttl: 20000,
         actions: [dismissAction("知道啦")],
       });
@@ -400,6 +433,7 @@
         title: sessionLabel(item) + " 这一轮出错了",
         body: item.text || "",
         meta: "DSH · 会话",
+        sessionId: item.sessionId,
         ttl: 26000,
         actions: [dismissAction("知道啦")],
       });
@@ -414,6 +448,7 @@
         icon: "❓",
         badge: "等你回答",
         title: sessionLabel(item) + " 有个问题",
+        sessionId: item.sessionId,
         body: item.text || "",
         meta: "DSH · 会话",
         actions: [dismissAction("知道了")],
@@ -629,6 +664,7 @@
     timers.push(setInterval(function () {
       if (state.cards.length > 0) place();
     }, 1200));
+    timers.push(setInterval(sweepCards, 1200));
     timers.push(setInterval(tickFeed, 5000));
     timers.push(setInterval(pollStatus, 4000));
     window.addEventListener("resize", place);

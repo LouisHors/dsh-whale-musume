@@ -28,6 +28,9 @@
 - 新增 `test/linuxdo.test.mjs`（9 例：RSS 解析/实体解码/正文清洗/版块筛选/随机去重/已读合并/URL 白名单/TTL+退避/并发单飞）与 `test/notifications.test.mjs`（12 例：完成/出错/截断/取消静默、子代理门、提问与审批折叠、resolved、标题兜底、环形缓冲、坏数据不抛、边界函数）；`desktop-client` 与 `v250-*` 的脚本数断言从 2 段改成 3 段（core + presenter + extras）
 - 热重载相关的断言：`desktop-client` 的 `c1/c2` 把 `/assets-rev` 信标纳入宿主路由白名单；`f1/f2` 的引导标志从 `true` 改成时间戳（用于判断「是否又一次热重载」）；`f3` 改成「重新物化会先拆旧再注新」——断言样式/脚本始终各一份、资源按 5→10 次重拉，而不是「不重复拉取」。`tools/dom-stub.mjs` 增加 `HOST_REV_ROUTE` 桩（返回空 rev，让测试里不启动后台轮询）。全量 **224 全绿**
 
+### 修复
+
+- **卡片不撤 / 不消失**：回答提问后宿主不一定发 `user-question-reply`（0.2.1-rc.3 前台作答走工具返回），改为在 `tool/result`（按 `message.callId` 匹配）、`approval/decided`、以及 `turn/end` 时统一发 `resolved` 撤卡，悬空卡片不再堆叠；前端另加 1.2 秒兜底扫描，ttl 过期的卡片即使定时器丢失也会被收回，一轮结束时该会话的待答/待批卡片一并收走。
 ## v2.5.0 (2026-10-21)
 
 ### 新增
