@@ -16,7 +16,8 @@
 
 ### 文档
 
-- README 兼容性表补 `0.2.1-rc.3` 与 `0.2.x / 0.3.x 其余版本` 两行；v2.4.0 段落改为说明「为什么收敛成一个区间」；安装失败排查表新增 `incompatible-version` / `engines.dsh` 一行（升级插件，或 `dsh plugin allow-version` 单次豁免）
+- README 兼容性表补 `0.2.1-rc.3` 与 `0.2.x / 0.3.x 其余版本` 两行
+- README「开发与测试」新增「热重载」小节：桌面端 HMR 默认 `root: []` 只热更配置，给出 `hmr` patch 把监听目录指向本仓库的写法——host 侧保存即重载，client 侧刷新页面即可，不用重启 DSH；v2.4.0 段落改为说明「为什么收敛成一个区间」；安装失败排查表新增 `incompatible-version` / `engines.dsh` 一行（升级插件，或 `dsh plugin allow-version` 单次豁免）
 
 ### 测试
 

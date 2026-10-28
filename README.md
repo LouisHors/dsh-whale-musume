@@ -588,6 +588,23 @@ node test/cdp-whale-moe.mjs
 
 开发约定见 [CONTRIBUTING.md](CONTRIBUTING.md)：改动 `assets/` 表现层后请一并跑 `npm test`，涉及桌面端选择器/信号的改动请核对 [`docs/desktop-0.2.0-rc.2-contract.md`](docs/desktop-0.2.0-rc.2-contract.md) 与 [`docs/desktop-0.2.1-rc.2-contract.md`](docs/desktop-0.2.1-rc.2-contract.md)。
 
+### 热重载（桌面端 profile）
+
+DSH 桌面端自带 `@deepseek-ai/dsh-hmr`，默认 `root: []`（只热更配置，不监听源码）。想改完代码立刻生效，在 **profile 的 `cordis.patch.yml`** 里加一段，把监听目录指向本仓库：
+
+```yaml
+- id: hmr
+  config:
+    base: /abs/path/to/dsh-whale-musume
+    root:
+      - lib
+```
+
+- **host 半边**（`lib/*.js`）：保存即热重载，实测 2 秒内新路由上线，不用重启 DSH（首次加上这段 patch 本身也会触发一次重组，把已在运行的插件换成磁盘上的新代码）
+- **client 半边**（`lib/client.js`、`assets/*.js`、`assets/generated/*`）：由浏览器按需拉取，改完在应用窗口里刷新一次页面（⌘R）即可，同样不用重启
+- 不配这段也能用：改动会在下一次 profile 重组（插件市场里开关任一插件、或改 `cordis.patch.yml`）时生效
+
+
 ---
 
 ## 参与贡献
