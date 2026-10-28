@@ -28,7 +28,7 @@
 
   var PREFS = [
     { key: "pet", label: "看板娘" },
-    { key: "chat", label: "台词气泡" },
+    { key: "chat", label: "碎碎念" },
     { key: "particles", label: "粒子效果" }
   ];
 
@@ -343,39 +343,19 @@
     }
   }
 
-  var typingTimer = null;
-  var nextTimer = null;
-  function typeBubble(textNode, line) {
-    if (typingTimer) root.clearTimeout(typingTimer);
-    memory.currentTypingLine = line;
-    if (motionReduced()) {
-      textNode.textContent = line;
-      memory.currentTypingLine = "";
-      typingTimer = null;
-      return;
-    }
-    textNode.textContent = "";
-    var caret = doc.createElement("span");
-    caret.setAttribute("data-dsh-whale-caret", "true");
-    caret.textContent = "▍";
-    textNode.appendChild(caret);
-    var index = 0;
-    (function tick() {
-      if (index >= line.length) {
-        caret.remove();
-        typingTimer = null;
-        memory.currentTypingLine = "";
+  /* 台词气泡已并入小卡片：表现层不再自己画气泡，统一交给 extras 的说话卡。 */
+  function emitSpeech(line) {
+    var value = localizeLine(line || "");
+    if (!value) return;
+    memory.lastLine = value;
+    try {
+      if (typeof root.__dshWhaleSpeech === "function") {
+        root.__dshWhaleSpeech(value, { source: "mascot" });
         return;
       }
-      var ch = line.charAt(index);
-      textNode.insertBefore(doc.createTextNode(ch), caret);
-      index += 1;
-      var delay = 64;
-      if ("，。！？～…".indexOf(ch) !== -1) delay = 260;
-      else if (ch === " ") delay = 90;
-      else if (index % 5 === 0) delay = 130;
-      typingTimer = root.setTimeout(tick, delay);
-    })();
+    } catch (error) {
+      /* 卡片层不可用时静默，不让表现层崩掉 */
+    }
   }
 
   function ensureRoot() {
@@ -408,23 +388,6 @@
     motion.appendChild(layerB);
     frame.appendChild(motion);
 
-    var bubble = doc.createElement("div");
-    bubble.setAttribute("data-dsh-whale-bubble", "true");
-    bubble.hidden = true;
-    var text = doc.createElement("span");
-    text.setAttribute("data-dsh-whale-bubble-text", "true");
-    var gear = doc.createElement("button");
-    gear.type = "button";
-    gear.setAttribute("data-dsh-whale-gear", "true");
-    gear.setAttribute("aria-label", "鲸鱼娘偏好");
-    gear.textContent = "⚙";
-    gear.addEventListener("click", function (event) {
-      event.stopPropagation();
-      toggleMenu();
-    });
-    bubble.appendChild(text);
-    bubble.appendChild(gear);
-
     var gearMini = doc.createElement("button");
     gearMini.type = "button";
     gearMini.setAttribute("data-dsh-whale-gear-mini", "true");
@@ -444,7 +407,6 @@
     applyA11y(frame);
     frame.addEventListener("keydown", onFrameKey);
     ensureLiveRegion(rootNode);
-    rootNode.appendChild(bubble);
     rootNode.appendChild(gearMini);
     rootNode.appendChild(menu);
     doc.body.appendChild(rootNode);
@@ -811,49 +773,9 @@
     reconcile();
   }
 
-  function showLineNow(line) {
-    var rootNode = ensureRoot();
-    var bubble = rootNode.querySelector("[data-dsh-whale-bubble]");
-    var text = rootNode.querySelector("[data-dsh-whale-bubble-text]");
-    if (!bubble || !text) return;
-    var wasHidden = bubble.hidden;
-    bubble.classList.remove("dsh-whale-out");
-    if (memory.bubbleOutTimer) { root.clearTimeout(memory.bubbleOutTimer); memory.bubbleOutTimer = null; }
-    typeBubble(text, localizeLine(line));
-    bubble.hidden = false;
-    memory.bubbleHideAt = Date.now() + 4500;
-    if (wasHidden) bubble.classList.add("dsh-whale-pop");
-  }
-
-  function scheduleNext() {
-    if (nextTimer) root.clearTimeout(nextTimer);
-    nextTimer = root.setTimeout(function () {
-      nextTimer = null;
-      var next = memory.pendingLine;
-      memory.pendingLine = "";
-      if (next) showLineNow(next);
-    }, 160);
-  }
-
   function showLine(line) {
-    var rootNode = ensureRoot();
-    var bubble = rootNode.querySelector("[data-dsh-whale-bubble]");
-    var text = rootNode.querySelector("[data-dsh-whale-bubble-text]");
-    if (!bubble || !text) return;
-    /* single-slot queue: never restart the typewriter or stack timers */
-    if (!bubble.hidden && (typingTimer || nextTimer)) {
-      if (typingTimer) {
-        root.clearTimeout(typingTimer);
-        typingTimer = null;
-        text.textContent = memory.currentTypingLine;
-        memory.currentTypingLine = "";
-      }
-      memory.pendingLine = line;
-      scheduleNext();
-      return;
-    }
-    memory.pendingLine = "";
-    showLineNow(line);
+    if (!line) return;
+    emitSpeech(line);
   }
 
   function announceUnlocks(ids) {
@@ -2159,8 +2081,6 @@
       applyTheme(rootNode);
     }
     var frame = rootNode.querySelector("[data-dsh-whale-frame]");
-    var bubble = rootNode.querySelector("[data-dsh-whale-bubble]");
-    var bubbleText = rootNode.querySelector("[data-dsh-whale-bubble-text]");
     var view = memory.view;
 
     /* layout routing */
@@ -2206,19 +2126,11 @@
     }
     if (!layout.hidden) setPose(layout.src, true, moodActive ? memory.moodAnimate : true);
 
-    /* celebration override: 3 quick pats — type once, then keep the finished
-       bubble stable so repeated renders/reconciles can never re-jump it */
+    /* celebration override: 3 quick pats — say it once, never twice per render */
     if (Date.now() < celebrateUntil && view !== "settings" && readPref("chat")) {
-      var celebLine = localizeLine("诶嘿～最喜欢主人啦！");
       if (!memory.celebrationVisible) {
         memory.celebrationVisible = true;
-        memory.lastLine = celebLine;
-        typeBubble(bubbleText, celebLine);
-        bubble.hidden = false;
-        memory.bubbleHideAt = Date.now() + 4500;
-        bubble.classList.remove("dsh-whale-pop");
-        void bubble.offsetWidth;
-        bubble.classList.add("dsh-whale-pop");
+        emitSpeech("诶嘿～最喜欢主人啦！");
       }
       return;
     }
@@ -2226,28 +2138,8 @@
 
     /* speech: only meaningful workbench events speak */
     var eventStates = { failure: 1, success: 1, tool: 1, thinking: 1, curious: 1 };
-    if (computed.speak && readPref("chat") && view === "workbench" && eventStates[computed.state] && !typingTimer) {
-      typeBubble(bubbleText, computed.line);
-      bubble.hidden = false;
-      memory.bubbleHideAt = Date.now() + 4500;
-      if (!motionReduced() && computed.line !== memory.lastLine) {
-        bubble.classList.remove("dsh-whale-pop");
-        void bubble.offsetWidth;
-        bubble.classList.add("dsh-whale-pop");
-      }
-    } else {
-      /* keep the current manual line until its expiry; never force-hide here,
-         otherwise showLine() lines flicker for a single frame */
-    }
-    if (!bubble.hidden && Date.now() > memory.bubbleHideAt && !typingTimer && !nextTimer) {
-      if (!memory.bubbleOutTimer) {
-        bubble.classList.add("dsh-whale-out");
-        memory.bubbleOutTimer = root.setTimeout(function () {
-          memory.bubbleOutTimer = null;
-          bubble.hidden = true;
-          bubble.classList.remove("dsh-whale-out");
-        }, 200);
-      }
+    if (computed.speak && readPref("chat") && view === "workbench" && eventStates[computed.state] && computed.line !== memory.lastLine) {
+      emitSpeech(computed.line);
     }
 
     /* error shake + success sparkle + ADV attention burst + growth/dialogue, only on state change */
@@ -3084,10 +2976,7 @@
   }
 
   function bubbleFree() {
-    try {
-      var bubble = doc.querySelector("[data-dsh-whale-bubble]");
-      return !bubble || bubble.hidden || !(bubble.textContent || "").trim();
-    } catch (e) { return true; }
+    return true;
   }
 
   function showChatLine(line) {
@@ -3510,6 +3399,13 @@
           showChatLine(weatherNow);
         }
       });
+    }
+    if (!line && typeof root.__dshWhaleMurmurProvider === "function") {
+      try {
+        line = String(root.__dshWhaleMurmurProvider() || "");
+      } catch (error) {
+        line = "";
+      }
     }
     if (!line) {
       var topic = latestTaskTopic();

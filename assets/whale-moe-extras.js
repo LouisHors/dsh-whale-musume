@@ -111,6 +111,10 @@
       '[data-dsh-whale-alert] .dswe-act:hover{background:rgba(122,170,255,.26)}',
       '[data-dsh-whale-alert] .dswe-act[data-primary="1"]{background:rgba(122,170,255,.9);border-color:transparent;color:#0d1526}',
       '[data-dsh-whale-alert] .dswe-act[data-primary="1"]:hover{background:#a9c9ff}',
+      '[data-dsh-whale-alert="speech"]{background:rgba(18,20,29,.86);border-style:dashed;padding:9px 12px 8px}',
+      '[data-dsh-whale-alert="speech"] .dswe-body{color:#e9eefb;font-size:12px;line-height:1.6;font-style:italic;display:block;overflow:visible;-webkit-line-clamp:unset}',
+      '[data-dsh-whale-alert="speech"] .dswe-head{min-height:16px}',
+      '[data-dsh-whale-alert="speech"] .dswe-ico{opacity:.8}',
     ].join("\n");
     document.head.appendChild(style);
   }
@@ -242,6 +246,98 @@
       }, options.ttl);
     }
     return card;
+  }
+
+  /* ---------------- 说话卡（唯一的「气泡」） ---------------- */
+
+  function clipText(value, max) {
+    var text = String(value === undefined || value === null ? "" : value).replace(/\s+/g, " ").trim();
+    return text.length > max ? text.slice(0, max) + "…" : text;
+  }
+
+  function pickOne(list) {
+    return list[Math.floor(Math.random() * list.length)];
+  }
+
+  /**
+   * 说一句话：一张小卡片，自动消失，不占状态位。
+   * @param {string} text
+   * @param {{ttl?:number, url?:string}} [options]
+   */
+  function showSpeech(text, options) {
+    var opts = options || {};
+    var line = clipText(text, 110);
+    if (line === "") return null;
+    var ttl = typeof opts.ttl === "number" && opts.ttl > 0 ? opts.ttl : 7000;
+    var card = showCard({ kind: "speech", key: "speech", icon: "🐳", body: line, ttl: ttl });
+    if (card !== null && typeof opts.url === "string" && opts.url !== "") {
+      card.setAttribute("title", "点我打开这条话题");
+      card.style.cursor = "pointer";
+      card.addEventListener("click", function (event) {
+        if (event.target && event.target.closest && event.target.closest(".dswe-close")) return;
+        fetch(API + "linuxdo/open?url=" + encodeURIComponent(opts.url), { cache: "no-store" }).catch(function (error) {
+          console.warn("[dsh-whale-musume] 打开话题失败:", error);
+        });
+      });
+    }
+    return card;
+  }
+
+  /* ---------------- 碎碎念：把摸鱼池里的帖子嚼成一句人话 ---------------- */
+
+  var MURMUR_OPENERS = [
+    "我刚瞄到「{cat}」里有个帖子，",
+    "诶，「{cat}」那边有人在聊，",
+    "「{cat}」又有人发帖了，",
+    "刚刷到「{cat}」的一条，",
+  ];
+  var MURMUR_REACTIONS = [
+    "有点好奇。",
+    "想围观一下。",
+    "感觉能摸会儿鱼了。",
+    "这个话题我能聊两句。",
+    "有点意思。",
+    "看看大家都在折腾啥。",
+  ];
+
+  function firstClause(value, max) {
+    var text = String(value === undefined || value === null ? "" : value).replace(/\s+/g, " ").trim();
+    if (text === "" || text.length <= max) return text;
+    var head = text.slice(0, max);
+    var cut = Math.max(head.lastIndexOf("。"), head.lastIndexOf("！"), head.lastIndexOf("？"), head.lastIndexOf("；"), head.lastIndexOf("，"));
+    if (cut >= Math.floor(max * 0.35)) return head.slice(0, cut + 1);
+    return head.replace(/[\sA-Za-z0-9.]+$/, "") + "…";
+  }
+
+  function murmurFor(item) {
+    if (item === null || typeof item !== "object") return "";
+    var category = typeof item.category === "string" && item.category !== "" ? item.category : "linux.do";
+    var title = clipText(item.title, 34);
+    var excerpt = firstClause(item.excerpt, 26);
+    if (title === "" && excerpt === "") return "";
+    var gist = excerpt !== "" ? "《" + title + "》，说" + excerpt : "《" + title + "》";
+    return pickOne(MURMUR_OPENERS).replace("{cat}", category) + gist + pickOne(MURMUR_REACTIONS);
+  }
+
+  function speakMurmur(item) {
+    var line = murmurFor(item);
+    if (line === "") return null;
+    return showSpeech(line, { url: topicUrl(item), ttl: 8000 });
+  }
+
+  /* 表现层 idleChatTick 通过它取碎碎念（同步、走已缓存 feed）。 */
+  function murmurProvider() {
+    var feed = state.feed;
+    if (feed === null) {
+      if (!state.feedBusy) loadFeed(false).catch(function () {});
+      return "";
+    }
+    if (!Array.isArray(feed.items) || feed.items.length === 0) return "";
+    var item = pickFromFeed(feed, { skipSeen: true });
+    if (item === null) item = pickFromFeed(feed, { skipSeen: false });
+    if (item === null) return "";
+    markSeen(item.id);
+    return murmurFor(item);
   }
 
   /* ---------------- 状态小卡片（宿主 session 事件） ---------------- */
@@ -436,38 +532,7 @@
   }
 
   function showFeedCard(item) {
-    var category = typeof item.category === "string" && item.category !== "" ? item.category : "linux.do";
-    var title = typeof item.title === "string" ? item.title : "";
-    var excerpt = typeof item.excerpt === "string" ? item.excerpt : "";
-    var url = topicUrl(item);
-    showCard({
-      kind: "feed",
-      key: "feed",
-      icon: "🐳",
-      badge: category,
-      title: title,
-      body: excerpt,
-      meta: timeAgo(item.publishedAt) + (item.author ? " · " + item.author : ""),
-      actions: [
-        {
-          label: "换一个",
-          onClick: function () {
-            nextFeedCard(item.id);
-          },
-        },
-        {
-          label: "去逛逛",
-          primary: true,
-          onClick: function () {
-            if (url === "") return;
-            removeCardByKey("feed");
-            fetch(API + "linuxdo/open?url=" + encodeURIComponent(url), { cache: "no-store" }).catch(function (error) {
-              console.warn("[dsh-whale-musume] 打开话题失败:", error);
-            });
-          },
-        },
-      ],
-    });
+    return speakMurmur(item);
   }
 
   async function nextFeedCard(excludeId) {
@@ -579,12 +644,17 @@
     }
   }
 
+  window.__dshWhaleSpeech = showSpeech;
+  window.__dshWhaleMurmurProvider = murmurProvider;
+
   window.__dshWhaleExtras = {
     destroy: destroy,
     prefs: prefs,
     state: state,
     place: place,
     showCard: showCard,
+    speech: showSpeech,
+    murmur: speakMurmur,
     removeCard: removeCard,
     previewFeed: function () {
       return nextFeedCard("");

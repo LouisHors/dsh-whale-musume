@@ -8,6 +8,7 @@
 - **会话状态小卡片**：宿主新增 `lib/notifications.js`，订阅 `session/event` 折叠成前端卡片——`turn/end completed` → 回复完成（带会话标题与耗时），`turn/end error / max-tokens` → 出错/被截断，`tool/call ask_user_question` → 等你回答，`approval/asked` → 等你批准，`approval/decided` 与 `user-question-reply` → 发 `resolved` 撤卡；靠 `origin === "subagent"` / `delegationDepth > 0` 过滤子代理内部会话（**刻意不看 `parentSession`**：普通 fork 也带它）。前端每 4 秒带 `since` 游标拉 `GET /api/dsh-whale-musume/notify/events`，首拉只对齐游标不重放历史。设置同组可分别关「完成/出错」与「等你回答/批准」
 - 状态卡不做会话跳转：当前客户端没有公开的「切换到某会话」API，卡片只显示会话标题，点击由用户在侧边栏自己选
 - **表现层热重载（改 assets 不用重启）**：宿主新增 `GET /api/dsh-whale-musume/assets-rev`（assets 目录的 size+mtime 指纹）；静态资源路由对代码类文件（css/js/json）改发 `Cache-Control: no-store`，图片仍可缓存。前端每 2 秒对一次指纹，变了就先 `teardown` 旧实例（拆 `<style>`/`<script>`/桌宠根节点/卡片层/粒子/小游戏，清 idle 定时器与 MutationObserver，调 `__dshWhaleExtras.destroy()`），再用 `cache: "no-store"` 重新拉一遍资源重建，全程不需要刷新页面。`assets/dsh-whale-moe.js` 与 `assets/whale-moe-extras.js` 因此都补了幂等的自拆逻辑（脚本重复执行时先销毁上一份）
+- **台词气泡统一为碎碎念小卡片**：表现层不再自建 `[data-dsh-whale-bubble]`，所有台词（状态、互动、闲聊）统一走 extras 的说话卡——一张虚线小卡、自动消失、点卡片打开来源；闲聊默认从摸鱼池取帖，嚼成第一人称碎碎念（「我刚瞄到『开发调优』里有个帖子，《…》，说…」），取不到再回落内置语料。原「台词气泡」开关改名「碎碎念」
 - 顺带确认：生产版桌面端没有 reload 菜单，DevTools 里 `location.reload()` 会走桌面壳的 `did-fail-load` → 恢复窗口弹「重启」，所以热重载不能依赖手动刷新
 
 ### 适配

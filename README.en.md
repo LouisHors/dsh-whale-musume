@@ -198,7 +198,7 @@ More: [interaction board](docs/images/actions-board.png) · [new artwork board](
 - **No build step**: the `assets/` directory in this repo *is* the runtime artifact
 - **Artwork preloading**: the first screen loads only 5 common poses, the remaining 90+ are fetched one at a time every 120 ms while idle, so cold pose switches never stall; failures are silent
 - **Accessibility mode** (off by default): Tab focus, Enter/Space to pat, arrow keys to nudge position (Shift to speed up), state changes announced through `aria-live`
-- **Theme following**: follows the host's light/dark theme for bubbles and menus only — **artwork is never filtered**, so the art style is preserved
+- **Theme following**: follows the host's light/dark theme for cards and menus only — **artwork is never filtered**, so the art style is preserved
 - **Testable**: the state machine and the presentation layer are separate; unit tests run with plain `node --test`
 
 ---
@@ -289,7 +289,7 @@ Path: **DSH Settings → Mascot** — 15 pill toggles, a Chatty / Quiet work-spe
 
 | Group | Contents |
 |---|---|
-| Companion behaviour | What to call you, **her self-name** (empty falls back to the default), mascot on/off, speech bubbles, work speech (Chatty / Quiet), TTS playback (optional), particles, keyword reactions, slacking reminders, night mode, per-tool poses, drag inertia, proactive care, accessibility |
+| Companion behaviour | What to call you, **her self-name** (empty falls back to the default), mascot on/off, chatter, work speech (Chatty / Quiet), TTS playback (optional), particles, keyword reactions, slacking reminders, night mode, per-tool poses, drag inertia, proactive care, accessibility |
 | Weather | City, optional API key, weather effects toggle |
 | Balance | Balance care toggle, show-number toggle, current balance and tier |
 | Daily & growth | Today's quests / weekly sign-in / titles (tabbed) |
