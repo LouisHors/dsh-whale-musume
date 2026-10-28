@@ -33,6 +33,7 @@ import assert from "node:assert/strict";
 
 import {
   HOST_QUERY,
+  HOST_PREFS_ROUTE,
   HOST_REV_ROUTE,
   HOST_ROUTE,
   createAssetRouteFetch,
@@ -190,19 +191,20 @@ test("b3 注入顺序 style → core → presenter → extras,三个 <script> �
  * c. 三段资源都经宿主路由
  * ------------------------------------------------------------------ */
 
-test("c1 四段资源全部经宿主路由获取,顺序 css → core → presenter → extras(末尾再问一次热重载信标)", async () => {
+test("c1 先取偏好再按 css → core → presenter → extras 取资源,末尾问一次热重载信标", async () => {
   const { env } = await boot();
 
   assert.deepEqual(
     env.fetchCalls.map((call) => call.url),
     [
+      HOST_PREFS_ROUTE,
       `${ROUTE}dsh-whale-moe.css`,
       `${ROUTE}whale-moe-core.js`,
       `${ROUTE}dsh-whale-moe.js`,
       `${ROUTE}whale-moe-extras.js`,
       HOST_REV_ROUTE,
     ],
-    "四段资源必须按 样式 → 状态机 → 表现层 → 扩展层 的顺序走宿主路由,之后再取一次 assets 指纹"
+    "启动先读宿主偏好(localStorage 会随端口变化丢)，再按 样式 → 状态机 → 表现层 → 扩展层 取资源，末尾取一次 assets 指纹"
   );
   for (const call of env.fetchCalls) {
     assert.equal(call.external, false, `不应有绝对 http(s) 请求:${call.url}`);
@@ -218,7 +220,7 @@ test("c2 无外部 http(s) 请求,也无越出宿主路由的请求", async () =
   assert.deepEqual(plain(env.externalFetches()), [], "不得访问任何外部地址");
   for (const call of env.fetchCalls) {
     assert.ok(
-      call.url.startsWith(ROUTE) || call.url === HOST_REV_ROUTE,
+      call.url.startsWith(ROUTE) || call.url === HOST_REV_ROUTE || call.url === HOST_PREFS_ROUTE,
       `请求越出宿主路由:${call.url}`
     );
   }
@@ -392,7 +394,7 @@ test("f2 二次 apply 不重复注入(window 引导标志幂等)", async () => {
 
   assert.equal(env.styles().length, 1, "样式不得二次注入");
   assert.equal(env.scripts().length, 3, "脚本不得二次注入");
-  assert.equal(env.fetchCalls.length, 5, "资源不得二次拉取(4 段资源 + 1 次热重载信标)");
+  assert.equal(env.fetchCalls.length, 6, "资源不得二次拉取(偏好 1 + 资源 4 + 热重载信标 1)");
   // 真实宿主里二次 apply 只会发生在旧 fiber 已卸载之后(HMR);此处是同一 fiber 的
   // 重复调用,slots 冲突告警属预期,只记录不断言。
   assert.ok(env.warnings().length >= warningsAfterBoot);
@@ -413,7 +415,7 @@ test("f3 HMR 重新物化会先拆旧再注新(热重载不再叠加)", async ()
   // 再按新一轮引导注入 3 个脚本、重新拉 4 个资源——DOM 始终只有一份。
   assert.equal(env.styles().length, 1, "HMR 后旧样式应被移除,只剩新版本一份");
   assert.equal(env.scripts().length, 3, "HMR 后旧脚本应被移除,只剩新版本 3 段");
-  assert.equal(env.fetchCalls.length, 10, "HMR 后应重新拉一轮资源(5 + 5,含热重载信标)");
+  assert.equal(env.fetchCalls.length, 12, "HMR 后应重新拉一轮资源(6 + 6,含偏好与热重载信标)");
   assert.equal(typeof env.window[BOOT_FLAG], "number");
 });
 

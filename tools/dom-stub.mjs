@@ -36,6 +36,8 @@ export const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url
 export const HOST_ROUTE = "/api/dsh-whale-musume/assets";
 /** 表现层热重载信标路由（见 lib/index.js 的 assetsRevision）。 */
 export const HOST_REV_ROUTE = "/api/dsh-whale-musume/assets-rev";
+/** 偏好持久化路由（见 lib/index.js 的 /prefs）。 */
+export const HOST_PREFS_ROUTE = "/api/dsh-whale-musume/prefs";
 export const HOST_QUERY = "?f=";
 /** 合成来源:.invalid 是保留 TLD,永不可解析 —— 桩里也从不发起真实网络请求。 */
 export const HOST_ORIGIN = "http://dsh-desktop-host.invalid";
@@ -962,6 +964,13 @@ export function createAssetRouteFetch(options = {}) {
       entry.external = true;
       calls.push(entry);
       return Promise.resolve(makeResponse("", 0, false));
+    }
+    if (target === HOST_PREFS_ROUTE) {
+      entry.served = true;
+      entry.status = 200;
+      calls.push(entry);
+      // 不落盘：GET 返回空偏好，POST 直接成功，测试断言保持确定性。
+      return Promise.resolve(makeResponse('{"ok":true,"prefs":{},"count":0}', 200, true));
     }
     if (target === HOST_REV_ROUTE) {
       entry.served = true;

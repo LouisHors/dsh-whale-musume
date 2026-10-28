@@ -2,6 +2,10 @@
 
 ## 未发布 (Unreleased)
 
+### 修复
+
+- **重启后摸鱼卡与养成数据消失**：桌面端每次启动换随机端口，`localStorage` 按 origin 隔离导致设置回默认值；现在偏好与养成数据落盘到 `~/.dsh/plugin-data/dsh-whale-musume/prefs.json`，启动时回灌、变更时写回（`lib/prefs-store.js` + `/api/dsh-whale-musume/prefs` + 页面同步桥）
+
 ### 新增
 
 - **摸鱼推送（linux.do 最新话题）**：宿主新增 `lib/linuxdo.js`，用 `/usr/bin/curl` 抓 `https://linux.do/latest.rss`（Node fetch 过不了 Cloudflare 的 TLS 指纹，内置 5 分钟缓存、失败退避 10 分钟、并发单飞），解析 RSS 成条目并暴露 `GET /api/dsh-whale-musume/linuxdo/feed`；`GET /api/dsh-whale-musume/linuxdo/open?url=` 只放行 linux.do 的 https 链接，用系统浏览器打开。前端扩展层 `assets/whale-moe-extras.js` 在 DSH 忙（`[data-chat-running]` / 待答 / 待批准）时按间隔随机推一条你勾选版块的话题卡片，`localStorage` 记 400 条已读；设置 → 看板娘 → 「摸鱼与提醒」可关、选版块、调间隔**（默认关闭）**
