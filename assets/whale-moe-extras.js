@@ -265,60 +265,77 @@
       removeCardByKey(item.refId || "");
       return;
     }
+    /* 卡片上的确认按钮只做「收起卡片」：客户端没有公开的「切到某个会话」API，
+       所以「知道啦 / 知道了」不负责导航，关掉卡片后用户自己在侧边栏点会话。 */
+    var dismissKey = "";
+    function dismissAction(label) {
+      return {
+        label: label,
+        primary: true,
+        onClick: function () {
+          removeCardByKey(dismissKey);
+        },
+      };
+    }
+
     if (item.kind === "turn-done" && prefs.statusDone) {
       var duration = formatDuration(item.durationMs);
+      dismissKey = "done:" + item.sessionId + ":" + item.seq;
       showCard({
         kind: "status",
-        key: "done:" + item.sessionId + ":" + item.seq,
+        key: dismissKey,
         icon: "✅",
         badge: "完成了",
         title: sessionLabel(item) + " 回复好了",
         body: duration === "" ? "" : "这一轮用时 " + duration,
         meta: "DSH · 会话",
         ttl: 20000,
-        actions: [{ label: "知道啦", primary: true, onClick: function () {} }],
+        actions: [dismissAction("知道啦")],
       });
       return;
     }
     if (item.kind === "turn-error" && prefs.statusDone) {
+      dismissKey = "error:" + item.sessionId + ":" + item.seq;
       showCard({
         kind: "status",
-        key: "error:" + item.sessionId + ":" + item.seq,
+        key: dismissKey,
         icon: "⚠️",
         badge: "出错了",
         title: sessionLabel(item) + " 这一轮出错了",
         body: item.text || "",
         meta: "DSH · 会话",
         ttl: 26000,
-        actions: [{ label: "知道啦", primary: true, onClick: function () {} }],
+        actions: [dismissAction("知道啦")],
       });
       return;
     }
     if (item.kind === "question-asked" && prefs.statusAsk) {
+      dismissKey = item.refId || "question:" + item.seq;
       showCard({
         kind: "status",
-        key: item.refId || "question:" + item.seq,
+        key: dismissKey,
         refId: item.refId || "",
         icon: "❓",
         badge: "等你回答",
         title: sessionLabel(item) + " 有个问题",
         body: item.text || "",
         meta: "DSH · 会话",
-        actions: [{ label: "这就去", primary: true, onClick: function () {} }],
+        actions: [dismissAction("知道了")],
       });
       return;
     }
     if (item.kind === "approval-asked" && prefs.statusAsk) {
+      dismissKey = item.refId || "approval:" + item.seq;
       showCard({
         kind: "status",
-        key: item.refId || "approval:" + item.seq,
+        key: dismissKey,
         refId: item.refId || "",
         icon: "🔐",
         badge: "需要批准",
         title: sessionLabel(item) + " 在等你批准",
         body: item.text || "",
         meta: "DSH · 会话",
-        actions: [{ label: "这就去", primary: true, onClick: function () {} }],
+        actions: [dismissAction("知道了")],
       });
     }
   }
