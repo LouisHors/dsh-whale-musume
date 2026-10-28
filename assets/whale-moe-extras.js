@@ -20,7 +20,14 @@
   var API = "/api/dsh-whale-musume/";
   var PREFS_EVENT = "whale-moe-prefs-change";
   var CARD_WIDTH = 292;
-  var MAX_CARDS = 3;
+  var MAX_CARDS = 4;
+  /* 说话卡（碎碎念 / 状态台词 / 诊断提示）统一走一条队列：
+     正在读的那张绝不会被新来的话直接顶掉，后来的排队等它读完。 */
+  var SPEECH_MAX_QUEUE = 4;
+  var SPEECH_MIN_MS = 9000;
+  var SPEECH_MAX_MS = 26000;
+  var speechQueue = [];
+  var speechActive = null;
   var SEEN_KEY = "whale-moe:linuxdoSeen";
   var SEEN_CAP = 400;
   var timers = [];
@@ -57,7 +64,7 @@
     linuxdo: readPref("linuxdo", "0") !== "0",
     cats: readPref("linuxdoCats", "").split(",").map(function (name) { return name.trim(); }).filter(Boolean),
     every: Math.max(30, Number(readPref("linuxdoEvery", "120")) || 120),
-    busyOnly: readPref("linuxdoBusy", "1") !== "0",
+    busyOnly: readPref("linuxdoBusy", "0") !== "0",
     status: readPref("statusToast", "1") !== "0",
     statusDone: readPref("statusToastDone", "1") !== "0",
     statusAsk: readPref("statusToastAsk", "1") !== "0",
@@ -143,6 +150,13 @@
 
   function removeCard(card) {
     if (card === null || card === undefined) return;
+    /* 正在读的说话卡被手动关掉/提前收走时，立刻让队里的下一句顶上，
+       不留下 1 秒多的空白。 */
+    if (speechActive !== null && speechActive.card === card) {
+      if (speechActive.timer) clearTimeout(speechActive.timer);
+      speechActive = null;
+      setTimeout(playNextSpeech, 220);
+    }
     var index = state.cards.indexOf(card);
     if (index >= 0) state.cards.splice(index, 1);
     if (card.dsweTimer) clearTimeout(card.dsweTimer);
@@ -162,6 +176,11 @@
       else alive.push(card);
     });
     state.cards = alive;
+    if (speechActive !== null && !document.body.contains(speechActive.card)) {
+      if (speechActive.timer) clearTimeout(speechActive.timer);
+      speechActive = null;
+      playNextSpeech();
+    }
   }
 
   /** 一轮结束后，把该会话还挂着的提问/审批卡一起收走。 */
@@ -285,28 +304,117 @@
     return list[Math.floor(Math.random() * list.length)];
   }
 
+  /** 按字数估阅读时长：短句 9 秒起步，长句最多 26 秒，别让人看不完就换。 */
+  function speechDuration(text) {
+    var count = String(text === undefined || text === null ? "" : text).length;
+    return Math.max(SPEECH_MIN_MS, Math.min(SPEECH_MAX_MS, 2600 + count * 190));
+  }
+
+  function attachOpen(card, url) {
+    if (card === null || typeof url !== "string" || url === "") return;
+    card.setAttribute("title", "点我打开这条话题");
+    card.style.cursor = "pointer";
+    card.addEventListener("click", function (event) {
+      if (event.target && event.target.closest && event.target.closest(".dswe-close")) return;
+      fetch(API + "linuxdo/open?url=" + encodeURIComponent(url), { cache: "no-store" }).catch(function (error) {
+        console.warn("[dsh-whale-musume] 打开话题失败:", error);
+      });
+    });
+  }
+
+  function playSpeechJob(job) {
+    var card = showCard({
+      kind: "speech",
+      key: "speech",
+      icon: job.icon || "🐳",
+      badge: job.badge || "",
+      title: job.title || "",
+      body: job.body || job.line || "",
+      ttl: job.ttl,
+    });
+    if (card === null) {
+      speechActive = null;
+      playNextSpeech();
+      return;
+    }
+    attachOpen(card, job.url);
+    speechActive = { card: card, text: job.line || job.body || "", until: Date.now() + job.ttl, timer: 0 };
+    speechActive.timer = setTimeout(function () {
+      if (speechActive === null || speechActive.card !== card) return;
+      speechActive = null;
+      playNextSpeech();
+    }, job.ttl + 240);
+  }
+
+  function playNextSpeech() {
+    if (speechActive !== null) return;
+    var job = speechQueue.shift();
+    if (job === undefined) return;
+    playSpeechJob(job);
+  }
+
+  /** 把一条话排进队列；high 优先于 ambient（状态台词不能被摸鱼碎碎念压住太久）。 */
+  function enqueueJob(job) {
+    if (speechActive !== null && speechActive.text === job.line) return null;
+    var last = speechQueue.length > 0 ? speechQueue[speechQueue.length - 1].line : "";
+    if (last === job.line) return null;
+    if (speechActive === null) {
+      playSpeechJob(job);
+      return speechActive !== null ? speechActive.card : null;
+    }
+    if (job.priority === "high") {
+      var at = 0;
+      for (var index = 0; index < speechQueue.length; index += 1) {
+        if (speechQueue[index].priority === "high") at = index + 1;
+      }
+      speechQueue.splice(at, 0, job);
+    } else {
+      speechQueue.push(job);
+    }
+    while (speechQueue.length > SPEECH_MAX_QUEUE) {
+      var drop = -1;
+      for (var scan = speechQueue.length - 1; scan >= 0; scan -= 1) {
+        if (speechQueue[scan].priority !== "high") { drop = scan; break; }
+      }
+      speechQueue.splice(drop >= 0 ? drop : 0, 1);
+    }
+    return null;
+  }
+
   /**
-   * 说一句话：一张小卡片，自动消失，不占状态位。
+   * 说一句话：排队展示，自动消失，不占状态位。
    * @param {string} text
-   * @param {{ttl?:number, url?:string}} [options]
+   * @param {{ttl?:number, url?:string, source?:string, priority?:string}} [options]
    */
   function showSpeech(text, options) {
     var opts = options || {};
-    var line = clipText(text, 110);
+    var line = clipText(text, 120);
     if (line === "") return null;
-    var ttl = typeof opts.ttl === "number" && opts.ttl > 0 ? opts.ttl : 7000;
-    var card = showCard({ kind: "speech", key: "speech", icon: "🐳", body: line, ttl: ttl });
-    if (card !== null && typeof opts.url === "string" && opts.url !== "") {
-      card.setAttribute("title", "点我打开这条话题");
-      card.style.cursor = "pointer";
-      card.addEventListener("click", function (event) {
-        if (event.target && event.target.closest && event.target.closest(".dswe-close")) return;
-        fetch(API + "linuxdo/open?url=" + encodeURIComponent(opts.url), { cache: "no-store" }).catch(function (error) {
-          console.warn("[dsh-whale-musume] 打开话题失败:", error);
-        });
-      });
-    }
-    return card;
+    var explicitTtl = typeof opts.ttl === "number" && opts.ttl > 0 ? opts.ttl : 0;
+    return enqueueJob({
+      line: line,
+      body: line,
+      url: typeof opts.url === "string" ? opts.url : "",
+      ttl: explicitTtl > 0 ? Math.max(explicitTtl, speechDuration(line)) : speechDuration(line),
+      priority: opts.priority || (opts.source === "mascot" ? "high" : "ambient"),
+    });
+  }
+
+  /** 诊断/提示类的小卡片也排队，避免把正在读的碎碎念顶掉。 */
+  function showSpeechCard(options) {
+    var opts = options || {};
+    var body = opts.body || "";
+    var title = opts.title || "";
+    var line = clipText(body !== "" ? body : title, 120);
+    return enqueueJob({
+      line: line,
+      body: body,
+      title: title,
+      icon: opts.icon || "🐳",
+      badge: opts.badge || "",
+      ttl: typeof opts.ttl === "number" && opts.ttl > 0 ? opts.ttl : speechDuration(line),
+      priority: "ambient",
+    });
   }
 
   /* ---------------- 碎碎念：把摸鱼池里的帖子嚼成一句人话 ---------------- */
@@ -348,7 +456,7 @@
   function speakMurmur(item) {
     var line = murmurFor(item);
     if (line === "") return null;
-    return showSpeech(line, { url: topicUrl(item), ttl: 8000 });
+    return showSpeech(line, { url: topicUrl(item) });
   }
 
   /* 表现层 idleChatTick 通过它取碎碎念（同步、走已缓存 feed）。 */
@@ -581,7 +689,7 @@
         item = pickFromFeed(feed, { exclude: exclude });
       }
       if (item === null) {
-        showCard({ kind: "feed", key: "feed", icon: "🐳", badge: "linux.do", title: "这个话题池被我看完了", body: "等我再去抓一批新的，或者去设置里放宽版块。", meta: "", ttl: 8000 });
+        showSpeechCard({ icon: "🐳", badge: "linux.do", title: "这个话题池被我看完了", body: "等我再去抓一批新的，或者去设置里放宽版块。" });
         return;
       }
       state.currentFeedId = item.id;
@@ -589,18 +697,18 @@
       state.lastPushAt = Date.now();
       showFeedCard(item);
     } catch (error) {
-      showCard({ kind: "feed", key: "feed", icon: "🐳", badge: "linux.do", title: "没抓到新话题", body: String((error && error.message) || error), meta: "", ttl: 8000 });
+      showSpeechCard({ icon: "🐳", badge: "linux.do", title: "没抓到新话题", body: String((error && error.message) || error) });
     }
   }
 
-  async function tickFeed() {
+  async function tickMurmur() {
     if (!prefs.linuxdo || document.hidden) return;
-    if (prefs.busyOnly && !isBusy()) return;
-    if (Date.now() - state.lastPushAt < prefs.every * 1000) return;
+    var busy = isBusy();
+    if (prefs.busyOnly && !busy) return;
+    /* 忙的时候按设定间隔；空闲时也念叨，但放宽到 3 倍间隔（至少 4 分钟），不打扰发呆。 */
+    var interval = busy ? prefs.every * 1000 : Math.max(prefs.every * 3000, 240000);
+    if (Date.now() - state.lastPushAt < interval) return;
     if (state.feedBusy) return;
-    for (var index = 0; index < state.cards.length; index += 1) {
-      if (state.cards[index].dsweKey === "feed") return;
-    }
     state.feedBusy = true;
     try {
       await nextFeedCard("");
@@ -617,7 +725,7 @@
     prefs.linuxdo = readPref("linuxdo", "0") !== "0";
     prefs.cats = readPref("linuxdoCats", "").split(",").map(function (name) { return name.trim(); }).filter(Boolean);
     prefs.every = Math.max(30, Number(readPref("linuxdoEvery", "120")) || 120);
-    prefs.busyOnly = readPref("linuxdoBusy", "1") !== "0";
+    prefs.busyOnly = readPref("linuxdoBusy", "0") !== "0";
     prefs.status = readPref("statusToast", "1") !== "0";
     prefs.statusDone = readPref("statusToastDone", "1") !== "0";
     prefs.statusAsk = readPref("statusToastAsk", "1") !== "0";
@@ -650,6 +758,9 @@
     if (layer !== null) layer.remove();
     var style = document.querySelector('style[data-dsh-whale-alerts="css"]');
     if (style !== null) style.remove();
+    if (speechActive !== null && speechActive.timer) clearTimeout(speechActive.timer);
+    speechActive = null;
+    speechQueue = [];
     state.cards = [];
     state.layer = null;
   }
@@ -665,7 +776,7 @@
       if (state.cards.length > 0) place();
     }, 1200));
     timers.push(setInterval(sweepCards, 1200));
-    timers.push(setInterval(tickFeed, 5000));
+    timers.push(setInterval(tickMurmur, 5000));
     timers.push(setInterval(pollStatus, 4000));
     window.addEventListener("resize", place);
     window.addEventListener("scroll", place, true);
@@ -690,6 +801,8 @@
     place: place,
     showCard: showCard,
     speech: showSpeech,
+    speechCard: showSpeechCard,
+    speechQueue: function () { return { active: speechActive !== null, pending: speechQueue.length }; },
     murmur: speakMurmur,
     removeCard: removeCard,
     previewFeed: function () {
