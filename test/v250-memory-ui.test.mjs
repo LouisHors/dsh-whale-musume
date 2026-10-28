@@ -28,7 +28,7 @@ async function bootPresenter() {
   env.apply("dsh-whale-musume");
   await env.idle();
   const scripts = env.scripts();
-  assert.equal(scripts.length, 2, "客户端应注入 core + presenter 两段脚本");
+  assert.equal(scripts.length, 3, "客户端应注入 core + presenter + extras 三段脚本");
   vm.runInContext(scripts[0].textContent, env.context);
   vm.runInContext(scripts[1].textContent, env.context);
   await env.idle();

@@ -2,6 +2,12 @@
 
 ## 未发布 (Unreleased)
 
+### 新增
+
+- **摸鱼推送（linux.do 最新话题）**：宿主新增 `lib/linuxdo.js`，用 `/usr/bin/curl` 抓 `https://linux.do/latest.rss`（Node fetch 过不了 Cloudflare 的 TLS 指纹，内置 5 分钟缓存、失败退避 10 分钟、并发单飞），解析 RSS 成条目并暴露 `GET /api/dsh-whale-musume/linuxdo/feed`；`GET /api/dsh-whale-musume/linuxdo/open?url=` 只放行 linux.do 的 https 链接，用系统浏览器打开。前端扩展层 `assets/whale-moe-extras.js` 在 DSH 忙（`[data-chat-running]` / 待答 / 待批准）时按间隔随机推一条你勾选版块的话题卡片，`localStorage` 记 400 条已读；设置 → 看板娘 → 「摸鱼与提醒」可关、选版块、调间隔**（默认关闭）**
+- **会话状态小卡片**：宿主新增 `lib/notifications.js`，订阅 `session/event` 折叠成前端卡片——`turn/end completed` → 回复完成（带会话标题与耗时），`turn/end error / max-tokens` → 出错/被截断，`tool/call ask_user_question` → 等你回答，`approval/asked` → 等你批准，`approval/decided` 与 `user-question-reply` → 发 `resolved` 撤卡；靠 `origin === "subagent"` / `delegationDepth > 0` 过滤子代理内部会话（**刻意不看 `parentSession`**：普通 fork 也带它）。前端每 4 秒带 `since` 游标拉 `GET /api/dsh-whale-musume/notify/events`，首拉只对齐游标不重放历史。设置同组可分别关「完成/出错」与「等你回答/批准」
+- 状态卡不做会话跳转：当前客户端没有公开的「切换到某会话」API，卡片只显示会话标题，点击由用户在侧边栏自己选
+
 ### 适配
 
 - **`engines.dsh` 收敛为区间 `>=0.1.0-rc.6 <0.4.0`**：原来写的是 `>=0.1.0-rc.6 <0.2.0-rc.1 || 0.2.0-rc.2 || 0.2.1-rc.1 || 0.2.1-rc.2`，每出一个新预发布就要改一次，当前桌面端 `0.2.1-rc.3` 正好落在外面、装不上。现在一个区间覆盖 0.1.x 尾部、0.2.x 与 0.3.x；上限排他，`0.4.0` 的预发布仍放行，`0.4.0` 正式版及更高版本重新落回门禁外
@@ -15,6 +21,7 @@
 ### 测试
 
 - `test/dsh-engines.test.mjs` 真值表跟着扩：放行 0.1.0-rc.6 到 0.3.7 之间各段含预发布，拒绝 `0.1.0-rc.5` 之前与 `0.4.0` 起；`dshReleases` 断言补 `0.2.1-rc.3`，note 断言新区间字面量。单元与契约仍 **203 全绿**
+- 新增 `test/linuxdo.test.mjs`（9 例：RSS 解析/实体解码/正文清洗/版块筛选/随机去重/已读合并/URL 白名单/TTL+退避/并发单飞）与 `test/notifications.test.mjs`（12 例：完成/出错/截断/取消静默、子代理门、提问与审批折叠、resolved、标题兜底、环形缓冲、坏数据不抛、边界函数）；`desktop-client` 与 `v250-*` 的脚本数断言从 2 段改成 3 段（core + presenter + extras）。全量 **224 全绿**
 
 ## v2.5.0 (2026-10-21)
 

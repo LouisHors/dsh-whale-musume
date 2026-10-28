@@ -46,7 +46,7 @@ async function bootSettings() {
   env.apply("dsh-whale-musume");
   await env.idle();
   const scripts = env.scripts();
-  assert.equal(scripts.length, 2);
+  assert.equal(scripts.length, 3);
   vm.runInContext(scripts[0].textContent, env.context);
   await env.idle();
   assert.ok(env.sandbox.DshWhaleMoeCore, "core 必须挂到 window.DshWhaleMoeCore，迁移面板才能用");

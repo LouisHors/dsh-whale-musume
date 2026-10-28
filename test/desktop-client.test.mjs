@@ -158,7 +158,7 @@ test("b1 【惰性 CJS】factory 物化期即开始引导(副作用不在 apply 
 
   assert.equal(fetchesAtMaterialize, 1, "物化期应同步发出第 1 个资源请求(样式)");
   assert.equal(env.styles().length, 1, "等 await 链排空后应已注入样式");
-  assert.equal(env.scripts().length, 2, "等 await 链排空后应已注入两段脚本");
+  assert.equal(env.scripts().length, 3, "等 await 链排空后应已注入三段脚本");
 });
 
 test("b2 引导后注入 <style data-dsh-whale-musume=css>,内容与 assets/dsh-whale-moe.css 完全相等", async () => {
@@ -172,16 +172,16 @@ test("b2 引导后注入 <style data-dsh-whale-musume=css>,内容与 assets/dsh-
   assert.ok(CSS_TEXT.length > 1000, "样式表内容不应为空壳");
 });
 
-test("b3 注入顺序 style → core → presenter,两个 <script> 都带 data-dsh-whale-musume=js", async () => {
+test("b3 注入顺序 style → core → presenter → extras,三个 <script> 都带 data-dsh-whale-musume=js", async () => {
   const { env } = await boot();
   const scripts = env.scripts();
 
-  assert.equal(scripts.length, 2, `应注入 2 个 <script>(core + presenter),实际 ${scripts.length}`);
+  assert.equal(scripts.length, 3, `应注入 3 个 <script>(core + presenter + extras),实际 ${scripts.length}`);
   for (const script of scripts) assert.equal(script.getAttribute("data-dsh-whale-musume"), "js");
-  assert.equal(scripts[0].parentNode, env.document.body);
-  assert.equal(scripts[1].parentNode, env.document.body);
+  for (const script of scripts) assert.equal(script.parentNode, env.document.body);
   assert.equal(scripts[0].textContent, CORE_TEXT, "第 1 段脚本应等于 assets/whale-moe-core.js");
   assert.ok(scripts[1].textContent.length > 1000, "presenter 文本不应为空");
+  assert.ok(scripts[2].textContent.length > 500, "extras 文本不应为空壳");
   assert.equal(env.styles().length, 1, "样式只注入一次");
 });
 
@@ -189,13 +189,13 @@ test("b3 注入顺序 style → core → presenter,两个 <script> 都带 data-d
  * c. 三段资源都经宿主路由
  * ------------------------------------------------------------------ */
 
-test("c1 三段资源全部经宿主路由获取,顺序 css → core → presenter", async () => {
+test("c1 四段资源全部经宿主路由获取,顺序 css → core → presenter → extras", async () => {
   const { env } = await boot();
 
   assert.deepEqual(
     env.fetchCalls.map((call) => call.url),
-    [`${ROUTE}dsh-whale-moe.css`, `${ROUTE}whale-moe-core.js`, `${ROUTE}dsh-whale-moe.js`],
-    "三段资源必须按 样式 → 状态机 → 表现层 的顺序走宿主路由"
+    [`${ROUTE}dsh-whale-moe.css`, `${ROUTE}whale-moe-core.js`, `${ROUTE}dsh-whale-moe.js`, `${ROUTE}whale-moe-extras.js`],
+    "四段资源必须按 样式 → 状态机 → 表现层 → 扩展层 的顺序走宿主路由"
   );
   for (const call of env.fetchCalls) {
     assert.equal(call.external, false, `不应有绝对 http(s) 请求:${call.url}`);
@@ -351,7 +351,7 @@ test("e3 slots 服务缺失时 apply 不抛错,只告警,桌宠本体照常注�
   assert.ok(env.warnings().length >= 1, "应留下「slots 服务不可用」告警");
   assert.equal(env.errors().length, 0);
   assert.equal(env.styles().length, 1, "增强项失败不得影响样式注入");
-  assert.equal(env.scripts().length, 2, "增强项失败不得影响桌宠脚本注入");
+  assert.equal(env.scripts().length, 3, "增强项失败不得影响桌宠脚本注入");
 });
 
 /* ------------------------------------------------------------------ *
@@ -380,8 +380,8 @@ test("f2 二次 apply 不重复注入(window 引导标志幂等)", async () => {
   await env.idle();
 
   assert.equal(env.styles().length, 1, "样式不得二次注入");
-  assert.equal(env.scripts().length, 2, "脚本不得二次注入");
-  assert.equal(env.fetchCalls.length, 3, "资源不得二次拉取");
+  assert.equal(env.scripts().length, 3, "脚本不得二次注入");
+  assert.equal(env.fetchCalls.length, 4, "资源不得二次拉取");
   // 真实宿主里二次 apply 只会发生在旧 fiber 已卸载之后(HMR);此处是同一 fiber 的
   // 重复调用,slots 冲突告警属预期,只记录不断言。
   assert.ok(env.warnings().length >= warningsAfterBoot);
@@ -399,8 +399,8 @@ test("f3 HMR 重注册 + 重新物化 + 再次 apply 仍不重复注入", async 
   await env.idle();
 
   assert.equal(env.styles().length, 1, "HMR 后不得重复注入样式");
-  assert.equal(env.scripts().length, 2, "HMR 后不得重复注入脚本");
-  assert.equal(env.fetchCalls.length, 3, "HMR 后不得重复拉资源");
+  assert.equal(env.scripts().length, 3, "HMR 后不得重复注入脚本");
+  assert.equal(env.fetchCalls.length, 4, "HMR 后不得重复拉资源");
 });
 
 /* ------------------------------------------------------------------ *
