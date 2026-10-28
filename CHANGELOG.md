@@ -1,5 +1,21 @@
 # Changelog
 
+## 未发布 (Unreleased)
+
+### 适配
+
+- **`engines.dsh` 收敛为区间 `>=0.1.0-rc.6 <0.4.0`**：原来写的是 `>=0.1.0-rc.6 <0.2.0-rc.1 || 0.2.0-rc.2 || 0.2.1-rc.1 || 0.2.1-rc.2`，每出一个新预发布就要改一次，当前桌面端 `0.2.1-rc.3` 正好落在外面、装不上。现在一个区间覆盖 0.1.x 尾部、0.2.x 与 0.3.x；上限排他，`0.4.0` 的预发布仍放行，`0.4.0` 正式版及更高版本重新落回门禁外
+- **声明兼容 DSH 桌面端 `0.2.1-rc.3`**：对 `app.asar` 里 0.2.1-rc.3 的客户端包复核，鲸鱼娘用到的 DOM 标记（`[data-tool]` + `data-state`、`[data-chat-running]`、`[data-terminal]`、`[data-composer-input]`、`[data-shortcut-modal="settings"]`、`body[data-ds-dark-theme]`）与 `settings.section` 注册都还在，表现层选择器不变；`dsh.compatibility.dshReleases` 增加 `0.2.1-rc.3: compatible`。依据仍是静态契约加单元测试，**不是**在真实 Electron 里复跑的验收
+- **0.2.x / 0.3.x 其余版本按区间放行**：没有逐个版本核对，宿主若改了上表的选择器，桌宠会退化成只有立绘
+
+### 文档
+
+- README 兼容性表补 `0.2.1-rc.3` 与 `0.2.x / 0.3.x 其余版本` 两行；v2.4.0 段落改为说明「为什么收敛成一个区间」；安装失败排查表新增 `incompatible-version` / `engines.dsh` 一行（升级插件，或 `dsh plugin allow-version` 单次豁免）
+
+### 测试
+
+- `test/dsh-engines.test.mjs` 真值表跟着扩：放行 0.1.0-rc.6 到 0.3.7 之间各段含预发布，拒绝 `0.1.0-rc.5` 之前与 `0.4.0` 起；`dshReleases` 断言补 `0.2.1-rc.3`，note 断言新区间字面量。单元与契约仍 **203 全绿**
+
 ## v2.5.0 (2026-10-21)
 
 ### 新增

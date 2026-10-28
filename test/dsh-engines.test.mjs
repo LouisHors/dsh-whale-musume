@@ -1,13 +1,13 @@
 /**
- * DSH 0.2.1 兼容性声明回归。
+ * DSH 兼容性声明回归。
  *
  * 自 0.2.1-alpha.4 起，安装与 profile 启动优先用顶层 engines.dsh
  * （semver，includePrerelease: true）；未声明才回落 @deepseek-ai/dsh* peer。
  * 本包没有 DSH peer，不声明 engines.dsh 就等于「任何版本都放行」。
  *
- * 下面的比较器只覆盖本包这一条范围的语法（`||`、精确版本、`>=A <B`），
- * 预期真值表用 semver@7.8.5（与 dsh-v0.2.1-rc.2 的 app-boot 相同主版本）
- * 在 includePrerelease: true 下核对过。改范围时两张表必须一起改。
+ * 下面的比较器只覆盖本包这一条范围的语法（`>=A <B`），
+ * 预期真值表用 semver@7.8.5（与 dsh-v0.2.1-rc.3 的 app-boot 相同主版本）
+ * 在 includePrerelease: true 下逐条核对过。改范围时两张表必须一起改。
  */
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -17,7 +17,7 @@ const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url),
 const presenter = readFileSync(new URL("../assets/dsh-whale-moe.js", import.meta.url), "utf8");
 const client = readFileSync(new URL("../lib/client.js", import.meta.url), "utf8");
 
-const RANGE = ">=0.1.0-rc.6 <0.2.0-rc.1 || 0.2.0-rc.2 || 0.2.1-rc.1 || 0.2.1-rc.2";
+const RANGE = ">=0.1.0-rc.6 <0.4.0";
 
 /** @returns {{major:number,minor:number,patch:number,pre:string[]|null}|null} */
 function parse(version) {
@@ -87,7 +87,7 @@ test("package 版本是 2.5.0，且 engines.dsh 是字符串范围", () => {
   assert.deepEqual(pkg.dsh.client.inject, ["slots"]);
 });
 
-test("dshReleases 保留旧矩阵，并标明 0.2.1-rc.1 / rc.2", () => {
+test("dshReleases 保留旧矩阵，并标明 0.2.1-rc.1 / rc.2 / rc.3", () => {
   const releases = pkg.dsh.compatibility.dshReleases;
   assert.equal(releases["0.1.1-rc.2"], "compatible");
   assert.equal(releases["0.1.2-alpha.4"], "unknown");
@@ -96,10 +96,12 @@ test("dshReleases 保留旧矩阵，并标明 0.2.1-rc.1 / rc.2", () => {
   assert.equal(releases["0.2.0-rc.2"], "compatible");
   assert.equal(releases["0.2.1-rc.1"], "compatible");
   assert.equal(releases["0.2.1-rc.2"], "compatible");
+  assert.equal(releases["0.2.1-rc.3"], "compatible");
   assert.match(pkg.dsh.compatibility.note, /尚未在真实 Electron/);
+  assert.match(pkg.dsh.compatibility.note, />=0\.1\.0-rc\.6 <0\.4\.0/);
 });
 
-test("engines.dsh 放行已支持的 0.1.x、0.2.0-rc.2 与 0.2.1 rc", () => {
+test("engines.dsh 放行 0.1.x、0.2.x 与 0.3.x（含预发布）", () => {
   for (const version of [
     "0.1.0-rc.6",
     "0.1.0",
@@ -109,31 +111,40 @@ test("engines.dsh 放行已支持的 0.1.x、0.2.0-rc.2 与 0.2.1 rc", () => {
     "0.1.2-alpha.5",
     "0.1.2-rc.1",
     "0.1.7-rc.2",
+    "0.2.0-rc.1",
     "0.2.0-rc.2",
+    "0.2.0",
+    "0.2.1-alpha.1",
     "0.2.1-rc.1",
     "0.2.1-rc.2",
+    "0.2.1-rc.3",
+    "0.2.1",
+    "0.2.2",
+    "0.2.9",
+    "0.3.0-rc.1",
+    "0.3.0",
+    "0.3.7",
+    "0.4.0-rc.1",
   ]) {
     assert.equal(satisfies(version, pkg.engines.dsh), true, `${version} 应被 engines.dsh 放行`);
   }
 });
 
-test("engines.dsh 拒绝未核对的相邻版本，避免把未知宿主标成可装", () => {
+test("engines.dsh 只卡两端：0.1.0-rc.6 之前与 0.4.0 起都不放行", () => {
   for (const version of [
     "0.1.0-rc.5",
-    "0.2.0-rc.1",
-    "0.2.0",
-    "0.2.1-alpha.1",
-    "0.2.1-alpha.5",
-    "0.2.1",
-    "0.2.2",
-    "0.3.0",
+    "0.0.9",
+    "0.4.0",
+    "0.4.1",
+    "0.5.0",
+    "1.0.0",
   ]) {
     assert.equal(satisfies(version, pkg.engines.dsh), false, `${version} 不应被 engines.dsh 放行`);
   }
   assert.equal(satisfies("0.2.2.0", pkg.engines.dsh), false, "非法版本串按不满足处理");
 });
 
-test("0.2.1 复核过的 DOM 标记仍在表现层，且没有改去注册模型名 slot", () => {
+test("0.2.1-rc.3 复核过的 DOM 标记仍在表现层，且没有改去注册模型名 slot", () => {
   for (const marker of [
     '[data-shortcut-modal="settings"]',
     '[data-slot="conversation.chat.node"]',

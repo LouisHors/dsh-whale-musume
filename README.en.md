@@ -209,6 +209,8 @@ More: [interaction board](docs/images/actions-board.png) · [new artwork board](
 |---|:---:|---|
 | **DeepSeek Harness Desktop** `0.2.0-rc.2` | ✅ tested | That build's GUI defaulted to `127.0.0.1:19387`. Install and rollback: [0.2.0 deploy guide](docs/desktop-0.2.0-rc.2-deploy.md) |
 | **DeepSeek Harness Desktop / Web** `0.2.1-rc.1`, `0.2.1-rc.2` | ✅ static contract | Checked against tag `dsh-v0.2.1-rc.2` and the unit tests. **Not** re-run inside the Electron app. Desktop 0.2.1 binds with `--port 0` (OS-assigned); do not assume `19387`. See the [0.2.1 contract](docs/desktop-0.2.1-rc.2-contract.md) and [deploy delta](docs/desktop-0.2.1-rc.2-deploy.md) |
+| **DeepSeek Harness Desktop** `0.2.1-rc.3` (current desktop build) | ✅ static contract | Re-checked against the 0.2.1-rc.3 client bundle inside `app.asar`: `[data-tool]` + `data-state` (`running` / `preparing`), `[data-chat-running]`, `[data-terminal]`, `[data-composer-input]`, `[data-shortcut-modal="settings"]`, `body[data-ds-dark-theme]` and the `settings.section` registration are all present. The install gate now allows `>=0.1.0-rc.6 <0.4.0`; on `incompatible-version` see [install troubleshooting](#when-the-plugin-store--dsh-plugin-add-cannot-install-it) |
+| **DeepSeek Harness** `0.2.x` / `0.3.x` (other versions) | ⚠️ range only | `engines.dsh` is `>=0.1.0-rc.6 <0.4.0`; no per-version run. If a host build changes the selectors above, the pet degrades to a bare sprite |
 | **Legacy web profile** (DSH `0.1.x`) | ✅ tested | `0.1.0-rc.6` and newer; the settings panel is verified on `0.1.1-rc.2` |
 | Other profiles (headless / acp, …) | ➖ no UI | There is no browser surface, so there is nowhere to show a pet |
 
@@ -239,7 +241,7 @@ When porting to the desktop app we audited every contract against the real `0.2.
 
 All of these have regression assertions in `test/desktop-client.test.mjs` (34 of them).
 
-v2.4.0 re-checked tag `dsh-v0.2.1-rc.2` ([`docs/desktop-0.2.1-rc.2-contract.md`](docs/desktop-0.2.1-rc.2-contract.md)). Those markers are still there, so no selector changed. The install gate did: since DSH `0.2.1-alpha.4`, top-level `engines.dsh` wins. This package declares `>=0.1.0-rc.6 <0.2.0-rc.1 || 0.2.0-rc.2 || 0.2.1-rc.1 || 0.2.1-rc.2`. Marking `0.2.1-rc.1` / `0.2.1-rc.2` compatible means that static check plus unit tests, not a live desktop run.
+v2.4.0 re-checked tag `dsh-v0.2.1-rc.2` ([`docs/desktop-0.2.1-rc.2-contract.md`](docs/desktop-0.2.1-rc.2-contract.md)). Those markers are still there, so no selector changed. The install gate did: since DSH `0.2.1-alpha.4`, top-level `engines.dsh` wins. v2.4.0 listed `>=0.1.0-rc.6 <0.2.0-rc.1 || 0.2.0-rc.2 || 0.2.1-rc.1 || 0.2.1-rc.2`, which needed an edit for every new prerelease. It is now a single range, `>=0.1.0-rc.6 <0.4.0`, covering the tail of 0.1.x plus 0.2.x and 0.3.x. The upper bound is exclusive: prereleases of `0.4.0` still pass, while `0.4.0` itself and anything above fall back outside the gate. Marking `0.2.1-rc.1` / `0.2.1-rc.2` / `0.2.1-rc.3` compatible means that static check plus unit tests, not a live desktop run.
 
 </details>
 
@@ -445,6 +447,7 @@ Short version: this is a **pure front-end plugin bundle** — no `prepare` scrip
 | `git ls-remote ... failed` / `failedAt: 'spec-host'` | your machine cannot reach GitHub | pre-check below |
 | `ERR_PNPM_NO_MATCHING_VERSION` / `404 ... not found` | registry mirror has not synced that version yet | switch to the official registry and retry; mirrors usually catch up within hours |
 | `Ignored build scripts: <pkg>` | pnpm blocked a build script (never happens for this plugin) | only then touch `allowBuilds` |
+| `incompatible-version`, or `requirements` carrying `engines.dsh` | the plugin's declared host range excludes your DSH | The current package allows `>=0.1.0-rc.6 <0.4.0`; upgrade the plugin, or grant a one-off exemption for the running version with `dsh plugin allow-version` |
 | `[exit 1]` with no key line | truncated log | attach `<DSH Home>\profiles\<profile>\hub.log` and `.plugin-manager\logs\operation-*\pnpm.log` to an issue |
 
 ```powershell
@@ -510,7 +513,7 @@ dsh-whale-musume/
 ├─ test/
 │  ├─ *.test.mjs                    # unit and contract tests
 │  ├─ desktop-client.test.mjs       # desktop (0.2.0-rc.2) contract and regression assertions
-│  ├─ dsh-engines.test.mjs          # engines.dsh range and the 0.2.1 matrix
+│  ├─ dsh-engines.test.mjs          # engines.dsh range and the compatibility matrix
 │  ├─ cdp-whale-moe.mjs             # full CDP acceptance for the legacy web host
 │  ├─ motion-qa.mjs / soak-work.mjs # motion quality and 60s soak
 │  └─ showcase-*.mjs                # artwork/action board generators

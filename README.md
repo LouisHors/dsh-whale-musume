@@ -209,6 +209,8 @@ window.__dshWhaleMoeDebug                                      // state 非 "hid
 |---|:---:|---|
 | **DeepSeek Harness 桌面端** `0.2.0-rc.2` | ✅ 已实测 | 那个构建的 GUI 默认 `127.0.0.1:19387`。安装/回滚见[0.2.0 部署手册](docs/desktop-0.2.0-rc.2-deploy.md) |
 | **DeepSeek Harness 桌面端 / Web** `0.2.1-rc.1`、`0.2.1-rc.2` | ✅ 静态契约 | 对照 tag `dsh-v0.2.1-rc.2` 的源码与单元测试，**没有**在真实 Electron 里复跑。0.2.1 的桌面端端口改为系统分配（`--port 0`），不要再假设 `19387`。差分见[0.2.1 契约](docs/desktop-0.2.1-rc.2-contract.md)与[部署差分](docs/desktop-0.2.1-rc.2-deploy.md) |
+| **DeepSeek Harness 桌面端** `0.2.1-rc.3`（当前桌面端） | ✅ 静态契约 | 对 `app.asar` 内 0.2.1-rc.3 的客户端包复核：`[data-tool]` + `data-state`（`running` / `preparing`）、`[data-chat-running]`、`[data-terminal]`、`[data-composer-input]`、`[data-shortcut-modal="settings"]`、`body[data-ds-dark-theme]`、`settings.section` 注册都在。安装门禁已放宽到 `>=0.1.0-rc.6 <0.4.0`，报 `incompatible-version` 时见[安装失败排查](#安装失败排查从插件市场--dsh-plugin-add-装不上) |
+| **DeepSeek Harness** `0.2.x` / `0.3.x` 其余版本 | ⚠️ 按区间放行 | `engines.dsh` 是 `>=0.1.0-rc.6 <0.4.0`，未逐个版本验收；若宿主改了上表的选择器，桌宠会退化成只有立绘 |
 | **旧版 Web profile**（DSH `0.1.x`） | ✅ 已实测 | `0.1.0-rc.6` 及以上；设置面板在 `0.1.1-rc.2` 实测 |
 | 其他 profile（headless / acp 等） | ➖ 无界面 | 没有浏览器界面，桌宠无处显示 |
 
@@ -239,7 +241,7 @@ v2.2.0 适配桌面端时，逐条核对了 DSH `0.2.0-rc.2` 的真实契约并�
 
 这些行为都补了回归断言（`test/desktop-client.test.mjs`，34 项）。
 
-v2.4.0 又对照了 tag `dsh-v0.2.1-rc.2`（见 [`docs/desktop-0.2.1-rc.2-contract.md`](docs/desktop-0.2.1-rc.2-contract.md)）：上表这些标记都还在，选择器没有改。变的是安装门禁——从 DSH `0.2.1-alpha.4` 起优先读顶层 `engines.dsh`。本包的范围是 `>=0.1.0-rc.6 <0.2.0-rc.1 || 0.2.0-rc.2 || 0.2.1-rc.1 || 0.2.1-rc.2`。`0.2.1-rc.1` / `0.2.1-rc.2` 标成 compatible 的依据是这份静态核对加单元测试，不是实机验收。
+v2.4.0 又对照了 tag `dsh-v0.2.1-rc.2`（见 [`docs/desktop-0.2.1-rc.2-contract.md`](docs/desktop-0.2.1-rc.2-contract.md)）：上表这些标记都还在，选择器没有改。变的是安装门禁——从 DSH `0.2.1-alpha.4` 起优先读顶层 `engines.dsh`。v2.4.0 当时把范围写成 `>=0.1.0-rc.6 <0.2.0-rc.1 || 0.2.0-rc.2 || 0.2.1-rc.1 || 0.2.1-rc.2`，每个新预发布都要改一次；现在收敛成一个区间 `>=0.1.0-rc.6 <0.4.0`，覆盖 0.1.x 尾部、0.2.x 与 0.3.x；上限是排他的，`0.4.0` 的预发布仍放行，`0.4.0` 正式版及更高版本重新落回门禁外。`0.2.1-rc.1` / `0.2.1-rc.2` / `0.2.1-rc.3` 标成 compatible 的依据是静态核对加单元测试，不是实机验收。
 
 </details>
 
@@ -445,6 +447,7 @@ node scripts/apply-theme.mjs --rollback "<backup dir>"
 | `git ls-remote ... failed` / `failedAt: 'spec-host'` | 本机到 GitHub 的链路 | 见「网络自查」 |
 | `ERR_PNPM_NO_MATCHING_VERSION` / `404 ... not found` | registry 镜像还没同步到这个版本 | 见「registry 与镜像」 |
 | `Ignored build scripts: <包名>` | pnpm 拦下了构建脚本（本插件不会出现） | 见「`allowBuilds` 是误报」 |
+| `incompatible-version` / `requirements` 里带 `engines.dsh` | 插件声明的宿主版本范围不含当前 DSH | 当前包已放宽到 `>=0.1.0-rc.6 <0.4.0`；若装的还是旧版，升级插件即可，或临时用 `dsh plugin allow-version` 给当前版本单次豁免 |
 | 只有 `[exit 1]`、没有关键行 | 日志被截断 | 贴 `<DSH Home>\profiles\<profile>\hub.log` 与 `.plugin-manager\logs\operation-*\pnpm.log` 到 issue |
 
 **registry 与镜像**：报 `ERR_PNPM_NO_MATCHING_VERSION` 时，先确认镜像有没有滞后——换官方源重试（GUI：添加插件对话框的 Registry 选择器选「npm 官方源」）。镜像滞后通常几小时内自愈，多数情况**直接重试**即可，不需要改任何配置文件。
@@ -532,7 +535,7 @@ dsh-whale-musume/
 ├─ test/
 │  ├─ *.test.mjs                    # 单元与契约测试
 │  ├─ desktop-client.test.mjs       # 桌面端（0.2.0-rc.2）契约与回归断言
-│  ├─ dsh-engines.test.mjs          # engines.dsh 与 0.2.1 矩阵
+│  ├─ dsh-engines.test.mjs          # engines.dsh 区间与兼容矩阵
 │  ├─ cdp-whale-moe.mjs             # 旧版 Web 的 CDP 全量验收
 │  ├─ motion-qa.mjs / soak-work.mjs # 动效质量与 60s 压测
 │  └─ showcase-*.mjs                # 立绘/动作总览生成
