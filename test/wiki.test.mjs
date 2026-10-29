@@ -273,6 +273,33 @@ test("pickRobotTask: 优先级 inbox → 过时 → 待办 → 断链 → index�
   assert.equal(pickRobotTask(summary, allDone), null);
 });
 
+test("pickRobotTask: 跳板机仓库有新提交时优先做「对照仓库改动」，做过就跳过", () => {
+  const summary = robotSummary({ stale: { count: 1, paths: ["wiki/x.md"] } });
+  const repos = [{ repo: "ha_agent", sha: "abcdef123456", short: "abcdef1", evidencePath: "raw-sources/public/jump/ha_agent/EVIDENCE.md" }];
+  const task = pickRobotTask(summary, [], undefined, { repos });
+  assert.equal(task.kind, "repo");
+  assert.deepEqual(task.ids, ["repo:ha_agent@abcdef123456"]);
+  assert.deepEqual(task.paths, ["raw-sources/public/jump/ha_agent/EVIDENCE.md"]);
+  assert.match(task.hint, /ha_agent@abcdef1/);
+  assert.match(task.hint, /不要 ssh/);
+
+  const afterRepo = pickRobotTask(summary, ["repo:ha_agent@abcdef123456"], undefined, { repos });
+  assert.equal(afterRepo.kind, "stale");
+});
+
+test("robotPrompt: 仓库证据批次读证据文件、允许新建页面，并放宽 raw-sources 规则", () => {
+  const task = {
+    kind: "repo",
+    label: "对照 ha_agent 的新提交",
+    paths: ["raw-sources/public/jump/ha_agent/EVIDENCE.md"],
+    hint: "只读证据",
+  };
+  const text = robotPrompt(task, robotSummary());
+  assert.match(text, /范围补充/);
+  assert.match(text, /只读 raw-sources\/public\/jump\//);
+  assert.doesNotMatch(text, /不碰 raw-sources\//);
+});
+
 test("pickRobotTask: 每批最多 8 个，空清单返回 null", () => {
   const many = Array.from({ length: 30 }, (_, index) => `wiki/p${index}.md`);
   const task = pickRobotTask(robotSummary({ stale: { count: 30, paths: many } }), []);
