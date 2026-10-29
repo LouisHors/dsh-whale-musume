@@ -296,13 +296,24 @@
       });
     });
 
-    /* 带会话的卡片可以点开对应会话（点了按钮不算） */
+    /* 按卡片类型绑点击：带会话的跳会话，带 onOpen 的走自定义（例如看详情）。 */
     if (options.sessionId) {
       card.style.cursor = "pointer";
       card.title = "点我打开这个会话";
       card.addEventListener("click", function (event) {
         if (event.target && event.target.closest && event.target.closest(".dswe-act, .dswe-close")) return;
         tryOpenSession(options.sessionId);
+      });
+    } else if (typeof options.onOpen === "function") {
+      card.style.cursor = "pointer";
+      card.title = options.openTitle || "点我看详情";
+      card.addEventListener("click", function (event) {
+        if (event.target && event.target.closest && event.target.closest(".dswe-act, .dswe-close")) return;
+        try {
+          options.onOpen();
+        } catch (error) {
+          console.warn("[dsh-whale-musume] 卡片点击失败:", error);
+        }
       });
     }
 
@@ -775,12 +786,41 @@
       title: "知识库该整理了",
       body: plan.length ? clipText(plan.join("；"), 150) : "巡检发现一些该处理的东西。",
       meta: bits.concat(card.pages ? [card.pages + " 篇"] : []).join(" · "),
+      onOpen: function () { showWikiDetail(payload); },
+      openTitle: "点我看巡检详情",
       actions: [
         { label: "开始整理", primary: true, onClick: function () { startWikiMaintain(); } },
         { label: "看详情", onClick: function () { showWikiDetail(payload); } },
         { label: "明天再说", onClick: function () { state.wikiSnoozeUntil = Date.now() + 86400000; removeCardByKey("wiki"); showSpeechCard({ icon: "🐳", body: "好，明天再提醒你整理知识库。" }); } }
       ]
     });
+  }
+
+  /** 把当前待审投递记成「已处理」：原件保留，但卡片不再重复计数。 */
+  function markInboxReviewed() {
+    fetch(API + "wiki/review?root=" + encodeURIComponent(prefs.wikiRoot || ""), {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      cache: "no-store",
+      body: JSON.stringify({ all: true })
+    })
+      .then(function (response) { return response.json(); })
+      .then(function (result) {
+        if (!result || !result.ok) {
+          showSpeechCard({ icon: "🐳", badge: "知识库", title: "没能记下来", body: clipText((result && result.error) || "宿主没返回结果", 100) });
+          return;
+        }
+        var summary = result.summary || null;
+        if (summary) state.wikiSummary = summary;
+        removeCardByKey("wiki");
+        if (summary && summary.needsAttention) {
+          showWikiCard({ card: summary, summary: summary });
+        } else {
+          showSpeechCard({ icon: "🐳", badge: "知识库", title: "记下了", body: "这批投递不再计入待审，之后有新投递会重新提醒。" });
+        }
+      }, function () {
+        showSpeechCard({ icon: "🐳", badge: "知识库", title: "没能记下来", body: "宿主没响应。" });
+      });
   }
 
   function showWikiDetail(payload) {
@@ -806,6 +846,7 @@
       meta: counts.concat(summary.lastCommit ? ["git " + summary.lastCommit.date] : []).join(" · "),
       actions: [
         { label: "开始整理", primary: true, onClick: function () { startWikiMaintain(); } },
+        { label: "都看过了", onClick: function () { markInboxReviewed(); } },
         { label: "打开目录", onClick: function () { openWikiFolder(); } },
         { label: "返回", onClick: function () { showWikiCard(payload); } }
       ]
@@ -840,6 +881,7 @@
             title: "整理会话已开",
             body: "遇到要你拍板的地方，我会弹「等你回答」卡片。",
             meta: "侧栏里能看到它干活",
+            sessionId: sid,
             actions: [
               { label: "去看看", primary: true, onClick: function () { if (!tryOpenSession(sid)) removeCardByKey("wiki-open"); } },
               { label: "知道了", onClick: function () { removeCardByKey("wiki-open"); } }

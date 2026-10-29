@@ -131,3 +131,32 @@ test("scanWiki 干净仓库不报待办，git 失败也不抛", async () => {
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test("scanWiki 支持把已处理投递排除出待审（原件保留版）", async () => {
+  const root = fixture({
+    "wiki/index.md": "---\nupdated: 2026-08-20\n---\n# 索引\n",
+    "inbox/a.md": "---\nstatus: pending-review\n---\n# 投递 A\n",
+    "inbox/b.md": "---\nstatus: pending-review\n---\n# 投递 B\n",
+  });
+  try {
+    const options = { now: NOW, runGit: async () => ({ ok: true, date: "2026-08-07", subject: "docs: ingest", dirty: 0 }) };
+    const before = await scanWiki(root, options);
+    assert.equal(before.inbox.pending, 2);
+    assert.equal(before.inbox.total, 2);
+    assert.equal(before.inbox.reviewed, 0);
+    assert.deepEqual(before.inbox.paths, ["inbox/a.md", "inbox/b.md"]);
+
+    const after = await scanWiki(root, { ...options, reviewed: ["inbox/a.md"] });
+    assert.equal(after.inbox.pending, 1);
+    assert.equal(after.inbox.total, 2);
+    assert.equal(after.inbox.reviewed, 1);
+    assert.deepEqual(after.inbox.samples.map((item) => item.path), ["inbox/b.md"]);
+    assert.ok(!after.plan.some((line) => line.includes("收件箱还有 2")));
+
+    const allReviewed = await scanWiki(root, { ...options, reviewed: ["inbox/a.md", "b.md"] });
+    assert.equal(allReviewed.inbox.pending, 0);
+    assert.ok(!allReviewed.plan.some((line) => line.includes("收件箱")));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
