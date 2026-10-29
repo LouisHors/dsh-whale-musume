@@ -162,3 +162,12 @@ test("一轮结束时清掉所有悬空卡片，避免越堆越多", () => {
   hub.ingest(fakeSession("s1"), { type: "turn/end", data: { turn: 2, reason: { kind: "completed" } } });
   assert.equal(hub.snapshot(0).items.filter((item) => item.kind === "resolved").length, 2);
 });
+
+test("turnStartedAt: turn/end 之前能取到这一轮的开始时间", () => {
+  const hub = new NotificationHub();
+  const session = { header: { id: "s-turn-time" } };
+  hub.ingest(session, { type: "turn/start", time: 1_000, data: { turn: 1 } });
+  assert.equal(hub.turnStartedAt("s-turn-time"), 1_000);
+  hub.ingest(session, { type: "turn/end", time: 9_000, data: { turn: 1, reason: { kind: "completed" } } });
+  assert.equal(hub.turnStartedAt("s-turn-time"), 0, "这轮结束后就没了");
+});

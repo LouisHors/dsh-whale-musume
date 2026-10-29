@@ -12,6 +12,7 @@ import {
   planPrompt,
   resolveWikiRoot,
   scanWiki,
+  latestMtimeMs,
   summarizeForCard,
   wikiFingerprint,
 } from "../lib/wiki.js";
@@ -185,6 +186,20 @@ test("wikiFingerprint: 清单不变指纹不变，清单一动就换指纹", asy
     // 只有 git 状态变化也要算（落盘状态会脏）
     const dirty = { ...first, dirty: first.dirty + 1 };
     assert.notEqual(wikiFingerprint(dirty), wikiFingerprint(first));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("latestMtimeMs: 取知识库里最新的文件改动时间", () => {
+  const root = fixture({
+    "AGENTS.md": "# a",
+    "wiki/index.md": "# i",
+  });
+  try {
+    const now = Date.now();
+    assert.ok(Math.abs(latestMtimeMs(root) - now) < 60_000, "刚写的文件应该接近当前时间");
+    assert.equal(latestMtimeMs(path.join(root, "nope")), 0);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
