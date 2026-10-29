@@ -84,7 +84,7 @@ test("回答提问后发 resolved，前端据此撤卡", () => {
     type: "user/message",
     data: { source: { kind: "user-question-reply", callId: "call-9" }, content: [] },
   });
-  assert.deepEqual(hub.snapshot(0).items[0], { seq: 1, at: hub.now(), kind: "resolved", refId: "question:call-9" });
+  assert.deepEqual(hub.snapshot(0).items[0], { seq: 1, at: hub.now(), kind: "resolved", refId: "question:call-9", sessionId: "s1" });
 });
 
 test("没有正式标题时用首条用户消息兜底，session/title 会覆盖它", () => {
@@ -143,7 +143,7 @@ test("提问的 tool/result 回来就撤卡（0.2.1-rc.3 回答常走这条）",
   });
   assert.equal(hub.snapshot(0).items.at(-1).refId, "question:call-7");
   hub.ingest(fakeSession("s1"), { type: "tool/result", data: { message: { callId: "call-7", content: [] } } });
-  assert.deepEqual(hub.snapshot(0).items.at(-1), { seq: 2, at: hub.now(), kind: "resolved", refId: "question:call-7" });
+  assert.deepEqual(hub.snapshot(0).items.at(-1), { seq: 2, at: hub.now(), kind: "resolved", refId: "question:call-7", sessionId: "s1" });
   // 再收到一次同样的 tool/result 不会重复撤卡
   assert.equal(hub.ingest(fakeSession("s1"), { type: "tool/result", data: { message: { callId: "call-7", content: [] } } }), null);
 });

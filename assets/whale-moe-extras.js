@@ -194,6 +194,8 @@
   /** 一轮结束后，把该会话还挂着的提问/审批卡一起收走。 */
   function dropSessionPending(sessionId) {
     if (!sessionId) return;
+    if (state.asks && state.asks[sessionId]) delete state.asks[sessionId];
+    removeCardByKey("asks:" + sessionId);
     state.cards.slice().forEach(function (card) {
       if (card.dsweSession !== sessionId) return;
       var kind = card.getAttribute("data-dsh-whale-alert");
@@ -528,9 +530,84 @@
     return title === "" ? "一个会话" : "「" + title + "」";
   }
 
+  /* 同一会话可能连着问好几轮（每次 ask_user_question 一个 refId），只留一张「等你回答」卡，
+     正文显示最新那条，并提示还有几个在排队，避免标题相同的卡片叠成一列。 */
+  var ASK_MAX_REFS = 6;
+
+  function askStore() {
+    if (!state.asks || typeof state.asks !== "object") state.asks = {};
+    return state.asks;
+  }
+
+  function findAskSession(refId) {
+    if (typeof refId !== "string" || refId === "") return "";
+    var store = askStore();
+    var hit = "";
+    Object.keys(store).forEach(function (sid) {
+      if (store[sid].refs.some(function (entry) { return entry.refId === refId; })) hit = sid;
+    });
+    return hit;
+  }
+
+  function renderAskCard(sid) {
+    var entry = askStore()[sid];
+    if (!entry || entry.refs.length === 0) {
+      removeCardByKey("asks:" + sid);
+      return;
+    }
+    var latest = entry.refs[entry.refs.length - 1];
+    var extra = entry.refs.length > 1 ? "（另有 " + (entry.refs.length - 1) + " 个问题在排队）" : "";
+    showCard({
+      kind: "status",
+      key: "asks:" + sid,
+      refId: latest.refId,
+      icon: "❓",
+      badge: "等你回答",
+      title: (entry.title || "DSH") + " 有个问题",
+      sessionId: sid,
+      body: (latest.text || "我有个问题想问你") + extra,
+      meta: "DSH · 会话",
+      actions: [{ label: "知道了", primary: true, onClick: function () { removeCardByKey("asks:" + sid); } }],
+    });
+  }
+
+  function addAsk(item) {
+    var sid = typeof item.sessionId === "string" ? item.sessionId : "";
+    if (sid === "") return;
+    var store = askStore();
+    var entry = store[sid] || (store[sid] = { refs: [], title: "" });
+    var refId = item.refId || "question:" + item.seq;
+    var text = item.text || "我有个问题想问你";
+    var hit = -1;
+    for (var index = 0; index < entry.refs.length; index += 1) {
+      if (entry.refs[index].refId === refId) hit = index;
+    }
+    if (hit >= 0) entry.refs[hit].text = text;
+    else entry.refs.push({ refId: refId, text: text });
+    if (entry.refs.length > ASK_MAX_REFS) entry.refs = entry.refs.slice(-ASK_MAX_REFS);
+    if (item.title) entry.title = item.title;
+    renderAskCard(sid);
+  }
+
+  function removeAsk(item) {
+    var refId = typeof item.refId === "string" ? item.refId : "";
+    var sid = typeof item.sessionId === "string" && item.sessionId !== "" ? item.sessionId : findAskSession(refId);
+    var store = askStore();
+    var entry = store[sid];
+    if (!entry) return;
+    entry.refs = entry.refs.filter(function (ask) { return ask.refId !== refId; });
+    if (entry.refs.length === 0) {
+      delete store[sid];
+      removeCardByKey("asks:" + sid);
+      return;
+    }
+    renderAskCard(sid);
+  }
+
   function handleStatusEvent(item) {
     if (item.kind === "resolved") {
       removeCardByKey(item.refId || "");
+      removeAsk(item);
       return;
     }
     /* 卡片本身可点开会话（见 showCard 的 sessionId 分支）；按钮只负责收卡片。 */
@@ -585,19 +662,7 @@
       return;
     }
     if (item.kind === "question-asked" && prefs.statusAsk) {
-      dismissKey = item.refId || "question:" + item.seq;
-      showCard({
-        kind: "status",
-        key: dismissKey,
-        refId: item.refId || "",
-        icon: "❓",
-        badge: "等你回答",
-        title: sessionLabel(item) + " 有个问题",
-        sessionId: item.sessionId,
-        body: item.text || "",
-        meta: "DSH · 会话",
-        actions: [dismissAction("知道了")],
-      });
+      addAsk(item);
       return;
     }
     if (item.kind === "approval-asked" && prefs.statusAsk) {
@@ -1033,7 +1098,7 @@
       if (kind === "done") {
         handleStatusEvent({ kind: "turn-done", seq: 0, sessionId: "demo", title: "重构 runner", durationMs: 84000 });
       } else if (kind === "question") {
-        handleStatusEvent({ kind: "question-asked", seq: 0, sessionId: "demo", title: "重构 runner", text: "要现在发布吗？", refId: "question:demo" });
+        handleStatusEvent({ kind: "question-asked", seq: 0, sessionId: "demo", title: "重构 runner", text: "要现在发布吗？", refId: "question:demo-" + Date.now() });
       } else if (kind === "feed") {
         showFeedCard({ id: "demo", title: "有没有人用 DSH 写桌面小挂件？聊聊你们的玩法", category: "开发调优", excerpt: "最近在折腾一个桌宠插件，发现 0.2 的 slot 机制挺好玩，想看看大家都在做什么。", link: "https://linux.do/t/topic/1", publishedAt: new Date(Date.now() - 6 * 60000).toISOString(), author: "alice" });
       }
