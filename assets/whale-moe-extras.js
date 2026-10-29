@@ -688,6 +688,8 @@
       var response = await fetch(API + "notify/events?since=" + Math.max(0, state.lastSeq), { cache: "no-store" });
       var body = await response.json();
       if (!body || body.ok !== true) return;
+      /* 宿主热重载后环形缓冲会从 0 重新计数：游标比它大说明换代了，重新对齐。 */
+      if (typeof body.lastSeq === "number" && state.lastSeq > body.lastSeq) state.lastSeq = -1;
       if (state.lastSeq < 0) {
         /* 首次只对齐游标，不把历史事件一次性糊到脸上 */
         state.lastSeq = body.lastSeq;
