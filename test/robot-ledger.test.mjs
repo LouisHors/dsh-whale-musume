@@ -8,11 +8,18 @@ import {
   markBatchFailed,
   markBatchFinished,
   markBatchStarted,
+  clockText,
+  emptyLedger,
+  inWindow,
+  nextWindowStart,
   normalizeLedger,
+  parseClock,
+  parseDays,
+  scheduleFrom,
+  scheduleState,
   setPause,
   shouldRun,
   slotOf,
-  emptyLedger,
 } from "../lib/robot-ledger.js";
 
 test("slotOf: 没有槽位给干净默认值，坏账本归一化", () => {
@@ -97,4 +104,85 @@ test("activeDone: 老格式字符串兼容，超过 14 天的条目过期", () =
   assert.deepEqual([...active].sort(), ["fresh", "legacy-id"]);
   assert.equal(active.has("old"), false);
   assert.equal(DONE_TTL_MS, 14 * 24 * 60 * 60 * 1000);
+});
+
+test("parseDays / parseClock / clockText：容错与边界", () => {
+  assert.deepEqual(parseDays("1,2,3"), [1, 2, 3]);
+  assert.deepEqual(parseDays("5 1 3"), [1, 3, 5]);
+  assert.deepEqual(parseDays("0,6"), [0, 6]);
+  assert.deepEqual(parseDays("1,1,9,-1,abc"), [1]);
+  assert.deepEqual(parseDays(""), []);
+  assert.deepEqual(parseDays(undefined), [1, 2, 3, 4, 5]);
+  assert.deepEqual(parseDays([3, 2]), [2, 3]);
+  assert.deepEqual(parseDays([7, "x"]), []);
+
+  assert.equal(parseClock("02:00"), 120);
+  assert.equal(parseClock("0:05"), 5);
+  assert.equal(parseClock("23:59"), 1439);
+  assert.equal(parseClock("24:00", 999), 999);
+  assert.equal(parseClock("", 42), 42);
+  assert.equal(clockText(120), "02:00");
+  assert.equal(clockText(5), "00:05");
+  assert.equal(clockText(1439), "23:59");
+  assert.equal(clockText(-10), "00:00");
+});
+
+test("inWindow：星期 + 时间段（端点排他），支持跨午夜与空集合", () => {
+  const weekdayEarly = scheduleFrom({ days: "1,2,3,4,5", start: "02:00", end: "04:00" });
+  // 2026-10-26 是周一
+  assert.equal(inWindow(new Date(2026, 9, 26, 2, 30).getTime(), weekdayEarly), true);
+  assert.equal(inWindow(new Date(2026, 9, 26, 1, 59).getTime(), weekdayEarly), false);
+  assert.equal(inWindow(new Date(2026, 9, 26, 4, 0).getTime(), weekdayEarly), false);
+  assert.equal(inWindow(new Date(2026, 9, 31, 3, 0).getTime(), weekdayEarly), false); // 周六
+  assert.equal(inWindow(new Date(2026, 9, 26, 3, 0).getTime(), scheduleFrom({ days: "", start: "02:00", end: "04:00" })), false);
+  assert.equal(inWindow(new Date(2026, 9, 26, 3, 0).getTime(), scheduleFrom({ days: [], start: "02:00", end: "04:00" })), false);
+
+  const wrap = scheduleFrom({ days: "1,2", start: "23:00", end: "05:00" });
+  assert.equal(inWindow(new Date(2026, 9, 26, 23, 30).getTime(), wrap), true);
+  assert.equal(inWindow(new Date(2026, 9, 27, 1, 0).getTime(), wrap), true);
+  assert.equal(inWindow(new Date(2026, 9, 26, 12, 0).getTime(), wrap), false);
+  assert.equal(inWindow(new Date(2026, 9, 27, 6, 0).getTime(), wrap), false);
+
+  const allDay = scheduleFrom({ days: "3", start: "09:00", end: "09:00" });
+  assert.equal(inWindow(new Date(2026, 9, 28, 3, 0).getTime(), allDay), true);
+  assert.equal(inWindow(new Date(2026, 9, 29, 3, 0).getTime(), allDay), false);
+});
+
+test("nextWindowStart / scheduleState：算出下一次开工时间", () => {
+  const schedule = scheduleFrom({ days: "1,2,3,4,5", start: "02:00", end: "04:00" });
+  const fridayNoon = new Date(2026, 9, 30, 12, 0).getTime();
+  const next = nextWindowStart(fridayNoon, schedule);
+  const expected = new Date(2026, 10, 2, 2, 0).getTime();
+  assert.equal(next, expected);
+
+  const state = scheduleState(fridayNoon, schedule);
+  assert.equal(state.open, false);
+  assert.equal(state.window, "02:00–04:00");
+  assert.equal(state.daysText, "一 二 三 四 五");
+  assert.equal(state.nextAt, new Date(expected).toISOString());
+
+  const inside = scheduleState(new Date(2026, 9, 26, 3, 0).getTime(), schedule);
+  assert.equal(inside.open, true);
+  assert.equal(inside.nextAt, "");
+});
+
+test("shouldRun：时间段外不开批，窗口内按冷却与暂停判定", () => {
+  const schedule = scheduleFrom({ days: "1,2,3,4,5", start: "02:00", end: "04:00" });
+  const mondayNight = new Date(2026, 9, 26, 3, 0).getTime();
+  const mondayNoon = new Date(2026, 9, 26, 12, 0).getTime();
+
+  assert.equal(shouldRun({ slot: {}, enabled: true, schedule, now: mondayNoon }), false);
+  assert.equal(shouldRun({ slot: {}, enabled: true, schedule, now: mondayNight }), true);
+  assert.equal(
+    shouldRun({ slot: { lastAt: new Date(mondayNight - 10 * 60_000).toISOString() }, enabled: true, schedule, everyMinutes: 30, now: mondayNight }),
+    false,
+  );
+  assert.equal(
+    shouldRun({ slot: { lastAt: new Date(mondayNight - 40 * 60_000).toISOString() }, enabled: true, schedule, everyMinutes: 30, now: mondayNight }),
+    true,
+  );
+  assert.equal(
+    shouldRun({ slot: { pausedUntil: new Date(mondayNight + 60_000).toISOString() }, enabled: true, schedule, now: mondayNight }),
+    false,
+  );
 });
