@@ -13,6 +13,7 @@ import {
   resolveWikiRoot,
   scanWiki,
   summarizeForCard,
+  wikiFingerprint,
 } from "../lib/wiki.js";
 
 function fixture(files) {
@@ -156,6 +157,34 @@ test("scanWiki 支持把已处理投递排除出待审（原件保留版）", as
     const allReviewed = await scanWiki(root, { ...options, reviewed: ["inbox/a.md", "b.md"] });
     assert.equal(allReviewed.inbox.pending, 0);
     assert.ok(!allReviewed.plan.some((line) => line.includes("收件箱")));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("wikiFingerprint: 清单不变指纹不变，清单一动就换指纹", async () => {
+  const root = fixture({
+    "AGENTS.md": "# agents",
+    "wiki/index.md": "---\nupdated: 2026-09-01\n---\n# index",
+    "wiki/a.md": "---\ndate: 2026-01-01\nupdated: 2026-01-01\n---\n# a",
+    "inbox/in.md": "---\nstatus: pending-review\n---\n# inbox",
+  });
+  const options = { now: Date.parse("2026-10-29T00:00:00Z"), runGit: async () => ({ ok: false, error: "not-a-repo", dirty: 0 }) };
+  try {
+    const first = await scanWiki(root, options);
+    const again = await scanWiki(root, options);
+    assert.equal(wikiFingerprint(first), wikiFingerprint(again));
+    assert.match(wikiFingerprint(first), /^\{/);
+
+    // 新文件进 inbox → 待审数变 → 指纹变
+    writeFileSync(path.join(root, "inbox/new.md"), "---\nstatus: pending-review\n---\n# new");
+    const changed = await scanWiki(root, options);
+    assert.equal(changed.inbox.pending, 1 + first.inbox.pending);
+    assert.notEqual(wikiFingerprint(changed), wikiFingerprint(first));
+
+    // 只有 git 状态变化也要算（落盘状态会脏）
+    const dirty = { ...first, dirty: first.dirty + 1 };
+    assert.notEqual(wikiFingerprint(dirty), wikiFingerprint(first));
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

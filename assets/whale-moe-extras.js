@@ -75,6 +75,11 @@
     wikiRoot: readPref("wikiRoot", "~/hors/my-code-wiki"),
     wikiEvery: Math.max(15, Number(readPref("wikiEvery", "180")) || 180),
     wikiAuto: readPref("wikiAuto", "1") !== "0",
+    speech: readPref("speech", "0") !== "0",
+    speechVoice: readPref("speechVoice", "Tingting"),
+    speechRate: Math.max(120, Math.min(280, Number(readPref("speechRate", "190")) || 190)),
+    speechStyle: readPref("speechStyle", "natural"),
+    speechPrefix: readPref("speechPrefix", ""),
   };
 
   var state = {
@@ -93,6 +98,74 @@
     wikiBusy: false,
     wikiSummary: null,
   };
+
+  /* ---------------- 语音播报 ---------------- */
+
+  var voiceAudio = null;
+  var voiceSeq = 0;
+  var voiceCard = null;
+
+  function stopVoice() {
+    if (voiceAudio !== null) {
+      try {
+        voiceAudio.pause();
+      } catch (error) {
+        /* ignore */
+      }
+      voiceAudio = null;
+    }
+  }
+
+  /** 把一段话念出来（宿主合成 wav，前端播放）。返回 Promise<boolean>。 */
+  function speakNow(text, options) {
+    var opts = options || {};
+    var line = clipText(text, 220);
+    if (line === "") return Promise.resolve(false);
+    if (!prefs.speech && opts.force !== true) return Promise.resolve(false);
+    var payload = {
+      text: line,
+      voice: opts.voice || prefs.speechVoice,
+      rate: Number(opts.rate || prefs.speechRate) || 190,
+      style: opts.style || prefs.speechStyle,
+    };
+    if (payload.style === "custom") {
+      payload.style = "";
+      payload.prefix = opts.prefix !== undefined ? opts.prefix : prefs.speechPrefix;
+    }
+    var seq = voiceSeq + 1;
+    voiceSeq = seq;
+    return fetch(API + "speech", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    })
+      .then(function (res) { return res.json(); })
+      .then(function (data) {
+        if (seq !== voiceSeq) return false;
+        if (!data || data.ok !== true || typeof data.url !== "string") return false;
+        stopVoice();
+        var audio = new Audio(data.url);
+        audio.volume = 1;
+        voiceAudio = audio;
+        var played = audio.play();
+        if (played && typeof played.then === "function") {
+          return played.then(function () { return true; }).catch(function () { return true; });
+        }
+        return true;
+      })
+      .catch(function () { return false; });
+  }
+
+  /** 卡片出现时念标题 + 正文（正文太长时宿主侧会截断），卡片收走时一起停。 */
+  function speakCard(options, card) {
+    if (!prefs.speech) return;
+    var bits = [];
+    if (options.title) bits.push(String(options.title));
+    if (options.body) bits.push(String(options.body));
+    if (bits.length === 0) return;
+    voiceCard = card;
+    speakNow(bits.join("，"), {});
+  }
 
   /* ---------------- 小卡片 ---------------- */
 
@@ -166,6 +239,10 @@
     if (speechActive !== null && speechActive.card === card) {
       if (speechActive.timer) clearTimeout(speechActive.timer);
       speechActive = null;
+    }
+    if (voiceCard === card) {
+      stopVoice();
+      voiceCard = null;
     }
     var index = state.cards.indexOf(card);
     if (index >= 0) state.cards.splice(index, 1);
@@ -368,6 +445,7 @@
         removeCard(card);
       }, options.ttl);
     }
+    speakCard(options, card);
     return card;
   }
 
@@ -885,6 +963,7 @@
   }
 
   function showWikiCard(payload) {
+    if (payload && payload.ack === true) return null;
     var card = payload && payload.card ? payload.card : {};
     var plan = Array.isArray(card.plan) ? card.plan : [];
     var bits = wikiCounts(card);
@@ -1016,6 +1095,11 @@
       var result = await wikiApi("scan", false);
       if (!result || !result.ok) return;
       state.wikiSummary = result;
+      // 这份清单已经被处理过（跑完整理会话 / 手动整理过），不再重复弹卡
+      if (result.ack === true) {
+        removeCardByKey("wiki");
+        return;
+      }
       if (!result.card || !result.card.needsAttention) {
         removeCardByKey("wiki");
         return;
@@ -1078,6 +1162,7 @@
     if (layer !== null) layer.remove();
     var style = document.querySelector('style[data-dsh-whale-alerts="css"]');
     if (style !== null) style.remove();
+    stopVoice();
     if (speechActive !== null && speechActive.timer) clearTimeout(speechActive.timer);
     speechActive = null;
     speechQueue = [];
@@ -1124,6 +1209,8 @@
     showCard: showCard,
     speech: showSpeech,
     speechCard: showSpeechCard,
+    speakNow: speakNow,
+    stopVoice: stopVoice,
     speechQueue: function () { return { active: speechActive !== null, pending: speechQueue.length }; },
     murmur: speakMurmur,
     wiki: {
