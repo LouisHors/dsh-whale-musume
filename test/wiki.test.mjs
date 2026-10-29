@@ -13,6 +13,8 @@ import {
   resolveWikiRoot,
   scanWiki,
   latestMtimeMs,
+  pickRobotTask,
+  robotPrompt,
   shouldAckWiki,
   summarizeForCard,
   wikiFingerprint,
@@ -91,8 +93,9 @@ test("scanWiki 汇总待审/过时/待办/断链/index 滞后", async () => {
     assert.equal(summary.pages, 4);
     assert.equal(summary.inbox.pending, 1);
     assert.equal(summary.inbox.samples[0].path, "inbox/a.md");
-    assert.equal(summary.stale.count, 2); // index(08-20) 与 old(03-01) 都超 45 天
+    assert.equal(summary.stale.count, 1); // index.md 是账本页不计入，只有 old(03-01) 超 45 天
     assert.equal(summary.stale.samples[0].path, "wiki/entities/old.md");
+    assert.deepEqual(summary.stale.paths, ["wiki/entities/old.md"]);
     assert.equal(summary.todos.items, 1);
     assert.equal(summary.todos.samples[0].path, "wiki/entities/old.md");
     assert.equal(summary.links.broken, 1);
@@ -110,7 +113,7 @@ test("scanWiki 汇总待审/过时/待办/断链/index 滞后", async () => {
     assert.ok(prompt.includes("wiki/log.md"));
 
     const card = summarizeForCard(summary);
-    assert.deepEqual(card.counts, { inbox: 1, stale: 2, todos: 1, broken: 1, indexLagDays: 61 });
+    assert.deepEqual(card.counts, { inbox: 1, stale: 1, todos: 1, broken: 1, indexLagDays: 61 });
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -220,4 +223,98 @@ test("shouldAckWiki: 工作目录命中就算；别的会话按时间窗 + 指�
   assert.equal(shouldAckWiki({ ...base, latestMtime: 1_000_000 - 4 * 60 * 1000 }), true);
   // ⑥ 指纹为空（扫描失败） → 不算
   assert.equal(shouldAckWiki({ ...base, fingerprint: "", sameCwd: true }), false);
+});
+
+function robotSummary(overrides = {}) {
+  return {
+    ok: true,
+    root: "/tmp/wiki",
+    pages: 3,
+    plan: [],
+    needsAttention: true,
+    index: { lagDays: 0 },
+    inbox: { pending: 0, paths: [] },
+    stale: { count: 0, paths: [] },
+    todos: { pages: 0, paths: [] },
+    links: { broken: 0, items: [] },
+    ...overrides,
+  };
+}
+
+test("pickRobotTask: 优先级 inbox → 过时 → 待办 → 断链 → index，跳过做过的", () => {
+  const summary = robotSummary({
+    inbox: { pending: 2, paths: ["inbox/a.md", "inbox/b.md"] },
+    stale: { count: 3, paths: ["wiki/x.md", "wiki/y.md", "wiki/z.md"] },
+    todos: { pages: 1, paths: ["wiki/t.md"] },
+    links: { broken: 1, items: [{ from: "wiki/l.md", target: "gone" }] },
+    index: { lagDays: 9 },
+  });
+  const first = pickRobotTask(summary, []);
+  assert.equal(first.kind, "inbox");
+  assert.deepEqual(first.paths, ["inbox/a.md", "inbox/b.md"]);
+
+  const second = pickRobotTask(summary, ["inbox:a.md", "inbox:b.md"]);
+  assert.equal(second.kind, "stale");
+  assert.deepEqual(second.paths, ["wiki/x.md", "wiki/y.md", "wiki/z.md"]);
+
+  const third = pickRobotTask(summary, ["inbox:a.md", "inbox:b.md", "stale:wiki/x.md", "stale:wiki/y.md", "stale:wiki/z.md"]);
+  assert.equal(third.kind, "todos");
+  assert.deepEqual(third.ids, ["todos:wiki/t.md"]);
+
+  const fourth = pickRobotTask(summary, ["inbox:a.md", "inbox:b.md", "stale:wiki/x.md", "stale:wiki/y.md", "stale:wiki/z.md", "todos:wiki/t.md"]);
+  assert.equal(fourth.kind, "broken");
+  assert.deepEqual(fourth.ids, ["broken:wiki/l.md|gone"]);
+  assert.deepEqual(fourth.paths, ["wiki/l.md"]);
+
+  const fifth = pickRobotTask(summary, ["inbox:a.md", "inbox:b.md", "stale:wiki/x.md", "stale:wiki/y.md", "stale:wiki/z.md", "todos:wiki/t.md", "broken:wiki/l.md|gone"]);
+  assert.equal(fifth.kind, "index");
+
+  const allDone = ["inbox:a.md", "inbox:b.md", "stale:wiki/x.md", "stale:wiki/y.md", "stale:wiki/z.md", "todos:wiki/t.md", "broken:wiki/l.md|gone", "index"];
+  assert.equal(pickRobotTask(summary, allDone), null);
+});
+
+test("pickRobotTask: 每批最多 8 个，空清单返回 null", () => {
+  const many = Array.from({ length: 30 }, (_, index) => `wiki/p${index}.md`);
+  const task = pickRobotTask(robotSummary({ stale: { count: 30, paths: many } }), []);
+  assert.equal(task.paths.length, 8);
+  assert.equal(pickRobotTask(robotSummary(), []), null);
+  assert.equal(pickRobotTask({ ok: false }, []), null);
+});
+
+test("robotPrompt: 带上这一批文件、范围约束，并要求每次写入写清依据", () => {
+  const task = { label: "更新 2 个过时页面", paths: ["wiki/a.md", "wiki/b.md"], hint: "先读源码" };
+  const text = robotPrompt(task, robotSummary());
+  assert.match(text, /只做一件事/);
+  assert.match(text, /- wiki\/a\.md/);
+  assert.match(text, /- wiki\/b\.md/);
+  assert.match(text, /任务说明：先读源码/);
+  assert.match(text, /每一次写入都要有依据/);
+  assert.match(text, /wiki\/log\.md/);
+  assert.match(text, /不碰 raw-sources\//);
+});
+
+test("scanWiki: wiki/log.md 与 wiki/index.md 不计入过时/待办（防止机器人自我投喂）", async () => {
+  const root = mkdtempSync(path.join(tmpdir(), "wiki-scan-"));
+  mkdirSync(path.join(root, "wiki"), { recursive: true });
+  writeFileSync(path.join(root, "AGENTS.md"), "# hi\n");
+  mkdirSync(path.join(root, "schema"), { recursive: true });
+  writeFileSync(path.join(root, "schema", "workflows.md"), "# wf\n");
+  writeFileSync(
+    path.join(root, "wiki", "index.md"),
+    "---\ndate: 2020-01-01\nupdated: 2020-01-01\ntype: index\n---\n# 索引\n",
+  );
+  writeFileSync(
+    path.join(root, "wiki", "log.md"),
+    "---\ndate: 2020-01-01\nupdated: 2020-01-01\ntype: log\n---\n# log\n\n待确认 TODO FIXME 待补 待更新\n",
+  );
+  writeFileSync(
+    path.join(root, "wiki", "page.md"),
+    "---\ndate: 2020-01-01\nupdated: 2020-01-01\ntype: note\n---\n# 页面\n\nTODO 补一句\n",
+  );
+  const summary = await scanWiki(root, { now: Date.parse("2026-10-29T00:00:00Z"), runGit: () => ({ ok: false }) });
+  assert.equal(summary.ok, true);
+  assert.deepEqual(summary.stale.paths, ["wiki/page.md"]);
+  assert.deepEqual(summary.todos.paths, ["wiki/page.md"]);
+  assert.equal(summary.todos.items, 1);
+  rmSync(root, { recursive: true, force: true });
 });

@@ -11,6 +11,9 @@
 - **重启后摸鱼卡与养成数据消失**：桌面端每次启动换随机端口，`localStorage` 按 origin 隔离导致设置回默认值；现在偏好与养成数据落盘到 `~/.dsh/plugin-data/dsh-whale-musume/prefs.json`，启动时回灌、变更时写回（`lib/prefs-store.js` + `/api/dsh-whale-musume/prefs` + 页面同步桥）
 
 ### 新增
+- **粮仓机器人**：设置里可开「自主翻粮」，宿主每隔几分钟自己开一批可见会话（审投递 → 更新过时页 → 补待办 → 修断链 → 同步 index），每批最多 8 个文件；提示词要求每次写入都在 `wiki/log.md` 写清依据，证据不足时用 `ask_user_question` 问用户。
+- 机器人账本 `wiki-robot.json`：试过的条目 14 天后重试；连续 3 批失败自动歇 30 分钟；一批超过 45 分钟没收尾按僵死收掉。
+- `wiki/log.md` 与 `wiki/index.md` 不再计入「过时页 / 待办」，避免机器人自己的记录自我投喂成新任务。
 
 - **摸鱼推送（linux.do 最新话题）**：宿主新增 `lib/linuxdo.js`，用 `/usr/bin/curl` 抓 `https://linux.do/latest.rss`（Node fetch 过不了 Cloudflare 的 TLS 指纹，内置 5 分钟缓存、失败退避 10 分钟、并发单飞），解析 RSS 成条目并暴露 `GET /api/dsh-whale-musume/linuxdo/feed`；`GET /api/dsh-whale-musume/linuxdo/open?url=` 只放行 linux.do 的 https 链接，用系统浏览器打开。前端扩展层 `assets/whale-moe-extras.js` 在 DSH 忙（`[data-chat-running]` / 待答 / 待批准）时按间隔随机推一条你勾选版块的话题卡片，`localStorage` 记 400 条已读；设置 → 看板娘 → 「摸鱼与提醒」可关、选版块、调间隔**（默认关闭）**
 - **会话状态小卡片**：宿主新增 `lib/notifications.js`，订阅 `session/event` 折叠成前端卡片——`turn/end completed` → 回复完成（带会话标题与耗时），`turn/end error / max-tokens` → 出错/被截断，`tool/call ask_user_question` → 等你回答，`approval/asked` → 等你批准，`approval/decided` 与 `user-question-reply` → 发 `resolved` 撤卡；靠 `origin === "subagent"` / `delegationDepth > 0` 过滤子代理内部会话（**刻意不看 `parentSession`**：普通 fork 也带它）。前端每 4 秒带 `since` 游标拉 `GET /api/dsh-whale-musume/notify/events`，首拉只对齐游标不重放历史。设置同组可分别关「完成/出错」与「等你回答/批准」
