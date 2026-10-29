@@ -39,7 +39,7 @@
 
 - `test/dsh-engines.test.mjs` 真值表跟着扩：放行 0.1.0-rc.6 到 0.3.7 之间各段含预发布，拒绝 `0.1.0-rc.5` 之前与 `0.4.0` 起；`dshReleases` 断言补 `0.2.1-rc.3`，note 断言新区间字面量。单元与契约仍 **237 全绿**
 - 新增 `test/linuxdo.test.mjs`（9 例：RSS 解析/实体解码/正文清洗/版块筛选/随机去重/已读合并/URL 白名单/TTL+退避/并发单飞）与 `test/notifications.test.mjs`（12 例：完成/出错/截断/取消静默、子代理门、提问与审批折叠、resolved、标题兜底、环形缓冲、坏数据不抛、边界函数）；`desktop-client` 与 `v250-*` 的脚本数断言从 2 段改成 3 段（core + presenter + extras）
-- `test/wiki.test.mjs` 增 1 例（清单不变指纹稳定、新投递/脏文件改变指纹）；新增 `test/speech.test.mjs`（8 例：文本清洗与截断、内联指令白名单与数值夹取、语速边界、缓存键稳定性、`say -v ?` 解析、合成调用与缓存命中、空文本拒绝、五个语气预设）；全量 **249 全绿**
+- `test/wiki.test.mjs` 增 3 例（清单不变指纹稳定、新投递/脏文件改变指纹、`latestMtimeMs`、`shouldAckWiki` 决策矩阵）；新增 `test/speech.test.mjs`（8 例：文本清洗与截断、内联指令白名单与数值夹取、语速边界、缓存键稳定性、`say -v ?` 解析、合成调用与缓存命中、空文本拒绝、五个语气预设）；全量 **250 全绿**
 - 新增 `test/prefs-store.test.mjs`（5 例：命名空间过滤、合并、缺失/损坏文件、超限拒绝、`DSH_HOME` 路径）与 `test/wiki.test.mjs`（6 例：路径校验、frontmatter、链接解析含表格转义、巡检汇总、提示词与卡片、git 失败不抛）；`desktop-client` 的请求列表把 `/prefs` 与 `/assets-rev` 纳入白名单
 - 热重载相关的断言：`desktop-client` 的 `c1/c2` 把 `/assets-rev` 信标纳入宿主路由白名单；`f1/f2` 的引导标志从 `true` 改成时间戳（用于判断「是否又一次热重载」）；`f3` 改成「重新物化会先拆旧再注新」——断言样式/脚本始终各一份、资源按 5→10 次重拉，而不是「不重复拉取」。`tools/dom-stub.mjs` 增加 `HOST_REV_ROUTE` 桩（返回空 rev，让测试里不启动后台轮询）。全量 **237 全绿**
 

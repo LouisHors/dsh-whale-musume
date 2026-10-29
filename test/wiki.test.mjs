@@ -13,6 +13,7 @@ import {
   resolveWikiRoot,
   scanWiki,
   latestMtimeMs,
+  shouldAckWiki,
   summarizeForCard,
   wikiFingerprint,
 } from "../lib/wiki.js";
@@ -203,4 +204,20 @@ test("latestMtimeMs: 取知识库里最新的文件改动时间", () => {
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+test("shouldAckWiki: 工作目录命中就算；别的会话按时间窗 + 指纹判断", () => {
+  const base = { fingerprint: "fp1", storedFingerprint: "fp0", startedAt: 1_000_000, now: 1_100_000 };
+  // ① 会话就在知识库目录里 → 直接算
+  assert.equal(shouldAckWiki({ ...base, sameCwd: true, latestMtime: 0 }), true);
+  // ② 指纹没变（已经记过） → 不再重复记
+  assert.equal(shouldAckWiki({ ...base, storedFingerprint: "fp1", latestMtime: 1_050_000 }), false);
+  // ③ 指纹变了、这一轮里文件确实动过 → 算
+  assert.equal(shouldAckWiki({ ...base, latestMtime: 1_050_000 }), true);
+  // ④ 指纹变了，但文件改动远早于这一轮（比如只是被打字触发） → 不算
+  assert.equal(shouldAckWiki({ ...base, latestMtime: 1_000_000 - 6 * 60 * 1000 }), false);
+  // ⑤ 边界：开始前 5 分钟内改的也算
+  assert.equal(shouldAckWiki({ ...base, latestMtime: 1_000_000 - 4 * 60 * 1000 }), true);
+  // ⑥ 指纹为空（扫描失败） → 不算
+  assert.equal(shouldAckWiki({ ...base, fingerprint: "", sameCwd: true }), false);
 });
