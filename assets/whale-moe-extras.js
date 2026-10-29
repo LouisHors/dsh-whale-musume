@@ -20,7 +20,7 @@
   var API = "/api/dsh-whale-musume/";
   var PREFS_EVENT = "whale-moe-prefs-change";
   var CARD_WIDTH = 292;
-  var MAX_CARDS = 4;
+  var MAX_CARDS = 1;
   /* 说话卡（碎碎念 / 状态台词 / 诊断提示）统一走一条队列：
      正在读的那张绝不会被新来的话直接顶掉，后来的排队等它读完。 */
   var SPEECH_MAX_QUEUE = 4;
@@ -32,6 +32,9 @@
   var SEEN_CAP = 400;
   var timers = [];
   var petObserver = null;
+  /* 单槽卡片队列：同一时刻只显示一张卡，其余排队，避免三张卡叠在一起 */
+  var pendingCards = [];
+  var SPEECH_MAX_PENDING = 4;
 
   function readPref(key, fallback) {
     try {
@@ -163,7 +166,6 @@
     if (speechActive !== null && speechActive.card === card) {
       if (speechActive.timer) clearTimeout(speechActive.timer);
       speechActive = null;
-      setTimeout(playNextSpeech, 220);
     }
     var index = state.cards.indexOf(card);
     if (index >= 0) state.cards.splice(index, 1);
@@ -172,6 +174,7 @@
     card.classList.add("dswe-out");
     setTimeout(function () {
       if (card.parentNode) card.parentNode.removeChild(card);
+      flushPending();
     }, 190);
   }
 
@@ -187,7 +190,7 @@
     if (speechActive !== null && !document.body.contains(speechActive.card)) {
       if (speechActive.timer) clearTimeout(speechActive.timer);
       speechActive = null;
-      playNextSpeech();
+      flushPending();
     }
   }
 
@@ -234,7 +237,42 @@
     return false;
   }
 
+  /** 单槽调度：状态/知识库卡排队，同一时刻只显示一张。 */
   function showCard(options) {
+    var key = options.key || "";
+    if (key !== "") {
+      for (var index = 0; index < state.cards.length; index += 1) {
+        if (state.cards[index].dsweKey === key) removeCard(state.cards[index]);
+      }
+      for (var pending = 0; pending < pendingCards.length; pending += 1) {
+        if ((pendingCards[pending].key || "") === key) {
+          pendingCards.splice(pending, 1);
+          pending -= 1;
+        }
+      }
+    }
+    /* 说话卡正在显示时，状态卡优先，直接把它收走 */
+    if (state.cards.length > 0 && state.cards[0].getAttribute("data-dsh-whale-alert") === "speech") {
+      removeCard(state.cards[0]);
+    }
+    if (state.cards.length === 0) return renderCard(options);
+    pendingCards.push(options);
+    while (pendingCards.length > SPEECH_MAX_PENDING) pendingCards.shift();
+    return null;
+  }
+
+  /** 有卡被收走后，把排队里的下一张顶上来；没有队列就继续碎碎念。 */
+  function flushPending() {
+    if (state.cards.length > 0) return;
+    var next = pendingCards.shift();
+    if (next !== undefined) {
+      renderCard(next);
+      return;
+    }
+    playNextSpeech();
+  }
+
+  function renderCard(options) {
     ensureStyle();
     var layer = ensureLayer();
     var key = options.key || "";
@@ -363,6 +401,11 @@
   }
 
   function playSpeechJob(job) {
+    /* 状态卡（提问/审批/知识库）占用槽位时，说话卡先让路，等槽位空了再说 */
+    if (state.cards.length > 0) {
+      speechQueue.unshift(job);
+      return;
+    }
     var card = showCard({
       kind: "speech",
       key: "speech",
@@ -853,6 +896,8 @@
       title: "知识库该整理了",
       body: plan.length ? clipText(plan.join("；"), 150) : "巡检发现一些该处理的东西。",
       meta: bits.concat(card.pages ? [card.pages + " 篇"] : []).join(" · "),
+      /* 提醒卡不会一直占着唯一的卡位，十分钟后自己让位给碎碎念 */
+      ttl: 10 * 60 * 1000,
       onOpen: function () { showWikiDetail(payload); },
       openTitle: "点我看巡检详情",
       actions: [
